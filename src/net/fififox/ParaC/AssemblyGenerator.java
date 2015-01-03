@@ -30,6 +30,7 @@ import net.fififox.ParaC.ParaCParser.UnaryExpressionContext;
 import org.antlr.v4.runtime.RuleContext;
 
 // http://unixwiz.net/techtips/win32-callconv-asm.html
+// https://en.wikipedia.org/wiki/X86_calling_conventions#cdecl
 public class AssemblyGenerator extends ParaCBaseListener {
 
 	private Deque<Map<String, Symbol>> symbolTable = new LinkedList<>();
@@ -50,16 +51,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	public void exitProgram(ProgramContext ctx) {
 		if (!codeMap.isEmpty())
 			throw new RuntimeException("codeMap = " + codeMap);
-		Symbol mainSymbol = findSymbol("main");
-		FunctionSymbol mainFunctionSymbol = null;
-		if (mainSymbol != null && mainSymbol instanceof FunctionSymbol) {
-			mainFunctionSymbol = (FunctionSymbol) mainSymbol;
-			if (!mainFunctionSymbol.returnType.equals("int")
-					|| mainFunctionSymbol.parameters.size() != 0)
-				mainFunctionSymbol = null;
-		}
-		if (mainFunctionSymbol == null)
-			throw new RuntimeException("Program has no `int main()' function");
 	}
 
 	@Override

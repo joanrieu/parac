@@ -1,9 +1,5 @@
 grammar ParaC;
 
-@header {
-	package net.fififox.ParaC;
-}
-
 WS
 :
 	[ \t\r\n]+ -> skip

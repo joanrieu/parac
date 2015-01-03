@@ -3,6 +3,8 @@
 #include <pthread.h>
 #include <sys/sysinfo.h>
 
+// standard library
+
 void printint(int x) {
 	printf("%d\n", x);
 }
@@ -10,6 +12,8 @@ void printint(int x) {
 void printfloat(float x) {
 	printf("%f", x);
 }
+
+// internals
 
 void (*__parac_parallel_for_thread)(int* i) = NULL;
 void* __parac_parallel_for_ebp = NULL;
@@ -21,11 +25,6 @@ struct Thread {
 	pthread_t ref;
 }* threads = NULL;
 
-int __parac_get_thread_count() {
-	return get_nprocs();
-}
-
-// http://bisqwit.iki.fi/story/howto/openmp/#LoopDirectiveFor
 void* __parac_run_parallel_for_thread(void *data) {
 	struct Thread* thread = data;
 	for (; thread->position < thread->limit; ++thread->position) {
@@ -34,8 +33,9 @@ void* __parac_run_parallel_for_thread(void *data) {
 	return NULL;
 }
 
+// http://bisqwit.iki.fi/story/howto/openmp/#LoopDirectiveFor
 void __parac_run_parallel_for(int start, int end) {
-	const int count = __parac_get_thread_count();
+	const int count = get_nprocs();
 	const int length = end - start;
 	struct Thread* threads = malloc(count * sizeof(struct Thread));
 	int i;
