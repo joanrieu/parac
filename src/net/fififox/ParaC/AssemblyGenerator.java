@@ -75,13 +75,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit2(ctx, "mov %esp, %ebp");
 		variableOffset = 2 * INT_SIZE;
 		for (VariableSymbol parameter : function.parameters) {
-			VariableSymbol variable = new VariableSymbol();
-			variable.name = parameter.name;
-			variable.type = parameter.type;
-			// TODO other types
-			variable.address = variableOffset + "(%ebp)";
-			variableOffset += INT_SIZE;
-			addSymbol(variable);
+			parameter.address = variableOffset + "(%ebp)";
+			switch (parameter.type) {
+			case INT:
+				variableOffset += INT_SIZE;
+				break;
+			}
+			addSymbol(parameter);
 		}
 		variableOffset = -INT_SIZE;
 	}
@@ -112,18 +112,23 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			addFunctionSymbol(typeName, declarator);
 		} else {
 			for (DeclaratorContext declarator : ctx.declarator()) {
-				VariableSymbol variable = new VariableSymbol();
-				variable.name = declarator.getText();
-				variable.type = typeName.getText();
-				// TODO other types
+				VariableSymbol variable = createVariable(typeName, declarator);
 				if (variableOffset == 0) { // global
-					variable.address = variable.name;
 					emit(ctx, ".bss");
-					emit2(ctx, ".lcomm " + variable.name + ", " + INT_SIZE);
+					switch (variable.type) {
+					case INT:
+						variable.address = variable.name;
+						emit2(ctx, ".lcomm " + variable.name + ", " + INT_SIZE);
+						break;
+					}
 				} else { // stack
-					variable.address = variableOffset + "(%ebp)";
-					variableOffset -= INT_SIZE;
-					emit2(ctx, "sub $" + INT_SIZE + ", %esp");
+					switch (variable.type) {
+					case INT:
+						variableOffset -= INT_SIZE;
+						emit2(ctx, "sub $" + INT_SIZE + ", %esp");
+						variable.address = variableOffset + "(%ebp)";
+						break;
+					}
 				}
 				addSymbol(variable);
 			}
@@ -441,15 +446,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	private FunctionSymbol addFunctionSymbol(TypeNameContext returnType,
 			DeclaratorContext declarator) {
 		FunctionSymbol function = new FunctionSymbol();
+		// FIXME check if declarator is valid
 		function.name = declarator.declarator().getText();
 		function.returnType = returnType.getText();
 		for (ParameterDeclarationContext parameter : declarator
 				.parameterDeclaration()) {
-			VariableSymbol variable = new VariableSymbol();
-			variable.name = parameter.declarator().getText();
-			variable.type = parameter.typeName().getText();
-			// TODO other types
-			function.parameters.add(variable);
+			function.parameters.add(createVariable(parameter.typeName(),
+					parameter.declarator()));
 		}
 		Symbol oldSymbol = findSymbol(function.name);
 		if (oldSymbol != null) {
@@ -477,6 +480,55 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		if (!(symbol instanceof VariableSymbol))
 			throw new RuntimeException("Symbol is not a variable: " + name);
 		return (VariableSymbol) symbol;
+	}
+
+	private VariableSymbol createVariable(TypeNameContext typeName,
+			DeclaratorContext declarator) {
+		VariableSymbol variable = new VariableSymbol();
+		switch (declarator.getChildCount()) {
+		case 1:
+			variable.name = declarator.getText();
+			switch (typeName.getText()) {
+			case "int":
+				variable.type = VariableSymbol.Type.INT;
+				break;
+			case "float":
+				variable.type = VariableSymbol.Type.FLOAT;
+				break;
+			}
+			break;
+		case 2:
+			if (declarator.getChild(0).getText().equals("*")) {
+				variable.name = declarator.getChild(1).getText();
+				switch (typeName.getText()) {
+				case "int":
+					variable.type = VariableSymbol.Type.INT_POINTER;
+					break;
+				case "float":
+					variable.type = VariableSymbol.Type.FLOAT_POINTER;
+					break;
+				}
+			}
+			break;
+		case 4:
+			if (declarator.getChild(1).getText().equals("[")) {
+				variable.name = declarator.getChild(0).getText();
+				switch (typeName.getText()) {
+				case "int":
+					variable.type = VariableSymbol.Type.INT_POINTER;
+					break;
+				case "float":
+					variable.type = VariableSymbol.Type.FLOAT_POINTER;
+					break;
+				}
+			}
+		}
+		log(null, variable.toString());
+		if (variable.name != null && variable.type != null)
+			return variable;
+		else
+			throw new RuntimeException("Invalid declaration of variable: "
+					+ variable.name);
 	}
 
 	private String newLabel() {

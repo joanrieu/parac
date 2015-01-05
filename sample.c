@@ -1,20 +1,24 @@
-int k;
+int* k;
+int b;
 
 void printint(int x);
+void printfloat(float x);
 
-void foo(int a) {
+void foo(float a) {
 	int i;
 #pragma omp parallel for
 	for (i = 0; i < 10; i++)
 		printint(i);
 	if (k > 1000)
-		printint(42);
+		printfloat(a);
 	printint(k++);
 	printint(k);
 }
 
 int main() {
-	k = 1337;
-	foo(42);
+	int l[1];
+	l[0] = 1337;
+	k = l;
+	foo(42.);
 	return 0;
 }
