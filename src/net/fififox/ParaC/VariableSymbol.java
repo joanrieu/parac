@@ -3,7 +3,7 @@ package net.fififox.ParaC;
 public class VariableSymbol extends Symbol {
 
 	public enum Type {
-		INT, INT_POINTER, FLOAT, FLOAT_POINTER
+		INT, FLOAT, INT_POINTER, FLOAT_POINTER, INT_ARRAY, FLOAT_ARRAY;
 	}
 
 	public Type type;

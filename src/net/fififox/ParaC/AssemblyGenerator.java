@@ -41,6 +41,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	private String specialParallelVariableName = null;
 
 	private static final int INT_SIZE = 4;
+	private static final int FLOAT_SIZE = 4;
+	private static final int POINTER_SIZE = 4;
 
 	@Override
 	public void enterProgram(ProgramContext ctx) {
@@ -80,6 +82,18 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			case INT:
 				variableOffset += INT_SIZE;
 				break;
+			case FLOAT:
+				variableOffset += FLOAT_SIZE;
+				break;
+			case INT_POINTER:
+			case FLOAT_POINTER:
+				variableOffset += POINTER_SIZE;
+				break;
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				throw new RuntimeException(
+						"Array forbidden in function prototype, use a pointer: "
+								+ parameter.name);
 			}
 			addSymbol(parameter);
 		}
@@ -113,22 +127,39 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		} else {
 			for (DeclaratorContext declarator : ctx.declarator()) {
 				VariableSymbol variable = createVariable(typeName, declarator);
+				int size;
+				switch (variable.type) {
+				case INT:
+					size = INT_SIZE;
+					break;
+				case FLOAT:
+					size = FLOAT_SIZE;
+					break;
+				case INT_POINTER:
+				case FLOAT_POINTER:
+					size = POINTER_SIZE;
+					break;
+				case INT_ARRAY:
+					size = INT_SIZE
+							* Integer
+									.parseInt(declarator.ICONSTANT().getText());
+					break;
+				case FLOAT_ARRAY:
+					size = FLOAT_SIZE
+							* Integer
+									.parseInt(declarator.ICONSTANT().getText());
+					break;
+				default:
+					throw new RuntimeException();
+				}
 				if (variableOffset == 0) { // global
-					emit(ctx, ".bss");
-					switch (variable.type) {
-					case INT:
-						variable.address = variable.name;
-						emit2(ctx, ".lcomm " + variable.name + ", " + INT_SIZE);
-						break;
-					}
+					// emit(ctx, ".bss"); // XXX
+					emit2(ctx, ".lcomm " + variable.name + ", " + INT_SIZE);
+					variable.address = variable.name;
 				} else { // stack
-					switch (variable.type) {
-					case INT:
-						variableOffset -= INT_SIZE;
-						emit2(ctx, "sub $" + INT_SIZE + ", %esp");
-						variable.address = variableOffset + "(%ebp)";
-						break;
-					}
+					emit2(ctx, "sub $" + size + ", %esp");
+					variableOffset -= size;
+					variable.address = variableOffset + "(%ebp)";
 				}
 				addSymbol(variable);
 			}
@@ -138,42 +169,72 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	@Override
 	public void exitPrimaryExpressionWithIdentifier(
 			PrimaryExpressionWithIdentifierContext ctx) {
-		String name = ctx.getChildCount() == 2 ? ctx.IDENTIFIER().getText()
-				: ctx.getText();
+		String name = ctx.IDENTIFIER().getText();
 		if (name.equals(specialParallelVariableName)) {
 			if (ctx.getChildCount() != 1)
 				throw new RuntimeException(
 						"Parallel iterator modification is forbidden: " + name);
+			// XXX is it really ?
 			emit2(ctx, "pushl (%ebx)");
 			return;
 		}
-		String address = getVariable(name).address;
-		emit2(ctx, "movl " + address + ", %eax");
-		if (ctx.getChildCount() == 2) {
+		VariableSymbol variable = getVariable(name);
+		switch (ctx.getChildCount()) {
+		case 1:
+			emit2(ctx, "pushl " + variable.address);
+			break;
+		case 2:
 			switch (ctx.getChild(1).getText()) {
 			case "++":
-				emit2(ctx, "incl " + address);
+				switch (variable.type) {
+				case INT:
+					emit2(ctx, "incl " + variable.address);
+					break;
+				}
 				break;
 			case "--":
-				emit2(ctx, "decl " + address);
+				switch (variable.type) {
+				case INT:
+					emit2(ctx, "decl " + variable.address);
+					break;
+				}
 				break;
 			}
+			emit2(ctx, "pushl %eax");
+		case 4:
+			int size;
+			switch (variable.type) {
+			case INT_POINTER:
+			case INT_ARRAY:
+				size = INT_SIZE;
+				break;
+			case FLOAT_POINTER:
+			case FLOAT_ARRAY:
+				size = FLOAT_SIZE;
+				break;
+			default:
+				throw new RuntimeException();
+			}
+			emit2(ctx, "movl $" + variable.address + ", %eax");
+			emit2(ctx, "add $" + size + ", %eax");
+			emit2(ctx, "push (%eax)");
+			break;
 		}
-		emit2(ctx, "pushl %eax");
-		// TODO other types
 	}
 
 	@Override
 	public void exitPrimaryExpressionWithInteger(
 			PrimaryExpressionWithIntegerContext ctx) {
-		emit2(ctx, "pushl $" + ctx.ICONSTANT().getText());
+		emit2(ctx, "pushl $" + ctx.getText());
 	}
 
 	@Override
 	public void exitPrimaryExpressionWithFloat(
 			PrimaryExpressionWithFloatContext ctx) {
-		// TODO other types
-		todo(ctx, "pushl " + ctx.getText());
+		emit2(ctx,
+				"pushl $"
+						+ Float.floatToRawIntBits(Float.parseFloat(ctx
+								.getText())));
 	}
 
 	@Override
@@ -364,6 +425,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	@Override
 	public void enterParallelIterationStatement(
 			ParallelIterationStatementContext ctx) {
+		// FIXME check if declared
+		// FIXME store symbol instead of name (cannot shadow otherwise)
 		if (specialParallelVariableName != null)
 			throw new RuntimeException("Parallel loops cannot be nested");
 		buffersChildren.add(ctx);
@@ -515,10 +578,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				variable.name = declarator.getChild(0).getText();
 				switch (typeName.getText()) {
 				case "int":
-					variable.type = VariableSymbol.Type.INT_POINTER;
+					variable.type = VariableSymbol.Type.INT_ARRAY;
 					break;
 				case "float":
-					variable.type = VariableSymbol.Type.FLOAT_POINTER;
+					variable.type = VariableSymbol.Type.FLOAT_ARRAY;
 					break;
 				}
 			}
@@ -564,10 +627,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 
 	private void log(RuleContext ctx, String message) {
 		emit(ctx, "# " + message);
-	}
-
-	private void todo(RuleContext ctx, String message) {
-		emit2(ctx, "#todo " + message);
 	}
 
 }

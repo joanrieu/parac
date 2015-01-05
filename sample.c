@@ -11,13 +11,12 @@ void foo(float a) {
 		printint(i);
 	if (k > 1000)
 		printfloat(a);
-	printint(k++);
-	printint(k);
+	printint(k[1]);
 }
 
 int main() {
-	int l[1];
-	l[0] = 1337;
+	int l[2];
+	l[1] = 1337;
 	k = l;
 	foo(42.);
 	return 0;

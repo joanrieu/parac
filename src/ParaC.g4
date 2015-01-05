@@ -13,6 +13,7 @@ IDENTIFIER
 FCONSTANT
 :
 	[0-9]+ '.' [0-9]*
+	| [0-9]* '.' [0-9]+
 ;
 
 ICONSTANT
@@ -130,8 +131,8 @@ iterationStatement
 parallelIterationStatement
 :
 	'#pragma' 'omp' 'parallel' 'for' 'for' '(' i1 = IDENTIFIER '=' from =
-	expression ';' i2 = IDENTIFIER '<' to = expression ';' i3 = IDENTIFIER '++' ')'
-	statement
+	expression ';' i2 = IDENTIFIER '<' to = expression ';' i3 = IDENTIFIER '++'
+	')' statement
 ;
 
 jumpStatement
