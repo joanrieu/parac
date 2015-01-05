@@ -71,8 +71,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit(ctx, ".global " + function.name);
 		emit(ctx, function.name + ":");
 		pushSymbolTable();
-		emit2(ctx, "pushl %ebp");
-		emit2(ctx, "movl %esp, %ebp");
+		emit2(ctx, "push %ebp");
+		emit2(ctx, "mov %esp, %ebp");
 		variableOffset = 2 * INT_SIZE;
 		for (VariableSymbol parameter : function.parameters) {
 			StackVariableSymbol local = new StackVariableSymbol();
@@ -97,7 +97,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	@Override
 	public void exitJumpStatement(JumpStatementContext ctx) {
 		if (ctx.expression() != null)
-			emit2(ctx, "popl %eax");
+			emit2(ctx, "pop %eax");
 		emit2(ctx, "leave");
 		emit2(ctx, "ret");
 	}
@@ -212,7 +212,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		}
 		emit2(ctx, "call " + functionSymbol.name);
 		emit2(ctx, "add $" + pushedInts * INT_SIZE + ", %esp");
-		emit2(ctx, "pushl %eax");
+		emit2(ctx, "push %eax");
 	}
 
 	@Override
@@ -220,20 +220,20 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		if (ctx.getChildCount() == 1)
 			return;
 		// TODO other types
-		emit2(ctx, "popl %eax");
+		emit2(ctx, "pop %eax");
 		String operator = ctx.getChild(0).getText();
 		switch (operator) {
 		case "-":
 			emit2(ctx, "neg %eax");
 			break;
 		case "!":
-			emit2(ctx, "testl %eax, %eax");
+			emit2(ctx, "test %eax, %eax");
 			emit2(ctx, "lahf");
 			emit2(ctx, "shrw $14, %ax");
-			emit2(ctx, "andl $1, %eax");
+			emit2(ctx, "and $1, %eax");
 			break;
 		}
-		emit2(ctx, "pushl %eax");
+		emit2(ctx, "push %eax");
 	}
 
 	@Override
@@ -242,21 +242,21 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			return;
 		// TODO other types
 		String operator = ctx.getChild(1).getText();
-		emit2(ctx, "popl %ecx");
-		emit2(ctx, "popl %eax");
+		emit2(ctx, "pop %ecx");
+		emit2(ctx, "pop %eax");
 		String label = null;
 		switch (operator) {
 		case "*":
 			emit2(ctx, "imul %ecx, %eax");
-			emit2(ctx, "pushl %eax");
+			emit2(ctx, "push %eax");
 			break;
 		case "+":
 			emit2(ctx, "add %ecx, %eax");
-			emit2(ctx, "pushl %eax");
+			emit2(ctx, "push %eax");
 			break;
 		case "-":
 			emit2(ctx, "sub %ecx, %eax");
-			emit2(ctx, "pushl %eax");
+			emit2(ctx, "push %eax");
 			break;
 		case "<":
 		case ">":
@@ -302,7 +302,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					"Parallel iterator modification is forbidden: " + name);
 		// TODO other types
 		emit2(ctx, "pop %eax");
-		emit2(ctx, "movl %eax, " + getVariableAddress(name));
+		emit2(ctx, "mov %eax, " + getVariableAddress(name));
 		emit2(ctx, "push %eax");
 	}
 
@@ -325,8 +325,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		String endLabel = label + "end";
 		emitBuffered(ctx.expression());
 		// TODO other types
-		emit2(ctx, "popl %eax");
-		emit2(ctx, "cmpl $0, %eax");
+		emit2(ctx, "pop %eax");
+		emit2(ctx, "cmp $0, %eax");
 		emit2(ctx, "je " + elseLabel);
 		emitBuffered(ctx.statement(0));
 		emit2(ctx, "jmp " + endLabel);
@@ -351,8 +351,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit(ctx, testLabel + ":");
 		emitBuffered(ctx.condition);
 		// TODO other types
-		emit2(ctx, "popl %eax");
-		emit2(ctx, "cmpl $0, %eax");
+		emit2(ctx, "pop %eax");
+		emit2(ctx, "cmp $0, %eax");
 		emit2(ctx, "je " + endLabel);
 		emitBuffered(ctx.statement());
 		emitBuffered(ctx.next);
@@ -407,7 +407,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit2(ctx, "ret");
 
 		emit(ctx, joinLabel + ":");
-		emit2(ctx, "movl __parac_parallel_for_esp, %esp");
+		emit2(ctx, "mov __parac_parallel_for_esp, %esp");
 		emit2(ctx, "movl $0, __parac_parallel_for_thread");
 		emit2(ctx, "movl $0, __parac_parallel_for_ebp");
 		emit2(ctx, "movl $0, __parac_parallel_for_esp");
