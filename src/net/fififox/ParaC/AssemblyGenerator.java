@@ -75,13 +75,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit2(ctx, "mov %esp, %ebp");
 		variableOffset = 2 * INT_SIZE;
 		for (VariableSymbol parameter : function.parameters) {
-			StackVariableSymbol local = new StackVariableSymbol();
-			local.name = parameter.name;
-			local.type = parameter.type;
+			VariableSymbol variable = new VariableSymbol();
+			variable.name = parameter.name;
+			variable.type = parameter.type;
 			// TODO other types
-			local.offset = variableOffset;
+			variable.address = variableOffset + "(%ebp)";
 			variableOffset += INT_SIZE;
-			addSymbol(local);
+			addSymbol(variable);
 		}
 		variableOffset = -INT_SIZE;
 	}
@@ -112,23 +112,18 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			addFunctionSymbol(typeName, declarator);
 		} else {
 			for (DeclaratorContext declarator : ctx.declarator()) {
-				VariableSymbol variable;
-				if (variableOffset != 0) {
-					StackVariableSymbol stackVariable = new StackVariableSymbol();
-					stackVariable.offset = variableOffset;
-					variableOffset -= INT_SIZE;
-					// TODO other types
-					variable = stackVariable;
-				} else {
-					variable = new VariableSymbol();
-				}
+				VariableSymbol variable = new VariableSymbol();
 				variable.name = declarator.getText();
 				variable.type = typeName.getText();
-				if (variable instanceof StackVariableSymbol) {
-					emit2(ctx, "sub $" + INT_SIZE + ", %esp");
-				} else {
+				// TODO other types
+				if (variableOffset == 0) { // global
+					variable.address = variable.name;
 					emit(ctx, ".bss");
 					emit2(ctx, ".lcomm " + variable.name + ", " + INT_SIZE);
+				} else { // stack
+					variable.address = variableOffset + "(%ebp)";
+					variableOffset -= INT_SIZE;
+					emit2(ctx, "sub $" + INT_SIZE + ", %esp");
 				}
 				addSymbol(variable);
 			}
@@ -147,7 +142,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			emit2(ctx, "pushl (%ebx)");
 			return;
 		}
-		String address = getVariableAddress(name);
+		String address = getVariable(name).address;
 		emit2(ctx, "movl " + address + ", %eax");
 		if (ctx.getChildCount() == 2) {
 			switch (ctx.getChild(1).getText()) {
@@ -180,11 +175,19 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	public void enterPrimaryExpressionWithCall(
 			PrimaryExpressionWithCallContext ctx) {
 		buffersChildren.push(ctx);
+	}
+
+	@Override
+	public void exitPrimaryExpressionWithCall(
+			PrimaryExpressionWithCallContext ctx) {
+		buffersChildren.pop();
 		String functionName = ctx.IDENTIFIER().getText();
 		FunctionSymbol functionSymbol = null;
 		try {
 			functionSymbol = (FunctionSymbol) findSymbol(functionName);
 		} catch (ClassCastException e) {
+			throw new RuntimeException("Symbol is not a function for call: "
+					+ ctx.getText());
 		}
 		if (functionSymbol == null)
 			throw new RuntimeException("No such function for call: "
@@ -192,14 +195,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		if (functionSymbol.parameters.size() != ctx.expression().size())
 			throw new RuntimeException("Invalid argument count for call: "
 					+ ctx.getText());
-	}
-
-	@Override
-	public void exitPrimaryExpressionWithCall(
-			PrimaryExpressionWithCallContext ctx) {
-		buffersChildren.pop();
-		FunctionSymbol functionSymbol = (FunctionSymbol) findSymbol(ctx
-				.IDENTIFIER().getText());
 		int pushedInts = 0;
 		for (int i = ctx.getChildCount() - 1; i >= 0; --i) {
 			String code = codeMap.remove(ctx.getChild(i));
@@ -210,7 +205,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			// TODO other types
 			// TODO check argument types
 		}
-		emit2(ctx, "call " + functionSymbol.name);
+		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
 		emit2(ctx, "add $" + pushedInts * INT_SIZE + ", %esp");
 		emit2(ctx, "push %eax");
 	}
@@ -302,7 +297,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					"Parallel iterator modification is forbidden: " + name);
 		// TODO other types
 		emit2(ctx, "pop %eax");
-		emit2(ctx, "mov %eax, " + getVariableAddress(name));
+		emit2(ctx, "mov %eax, " + getVariable(name).address);
 		emit2(ctx, "push %eax");
 	}
 
@@ -475,16 +470,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		return null;
 	}
 
-	private String getVariableAddress(String name) {
-		VariableSymbol symbol = null;
-		try {
-			symbol = (VariableSymbol) findSymbol(name);
-		} catch (ClassCastException e) {
-		}
+	private VariableSymbol getVariable(String name) {
+		Symbol symbol = findSymbol(name);
 		if (symbol == null)
 			throw new RuntimeException("No such variable: " + name);
-		return symbol instanceof StackVariableSymbol ? ""
-				+ ((StackVariableSymbol) symbol).offset + "(%ebp)" : name;
+		if (!(symbol instanceof VariableSymbol))
+			throw new RuntimeException("Symbol is not a variable: " + name);
+		return (VariableSymbol) symbol;
 	}
 
 	private String newLabel() {

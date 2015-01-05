@@ -9,6 +9,8 @@ void foo(int a) {
 		printint(i);
 	if (k > 1000)
 		printint(42);
+	printint(k++);
+	printint(k);
 }
 
 int main() {
