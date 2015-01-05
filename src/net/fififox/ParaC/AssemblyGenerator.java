@@ -2,6 +2,7 @@ package net.fififox.ParaC;
 
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
@@ -26,8 +27,11 @@ import net.fififox.ParaC.ParaCParser.SelectionStatementContext;
 import net.fififox.ParaC.ParaCParser.StatementContext;
 import net.fififox.ParaC.ParaCParser.TypeNameContext;
 import net.fififox.ParaC.ParaCParser.UnaryExpressionContext;
+import net.fififox.ParaC.VariableSymbol.Type;
 
 import org.antlr.v4.runtime.RuleContext;
+import org.antlr.v4.runtime.misc.Interval;
+import org.antlr.v4.runtime.tree.ParseTree;
 
 // http://unixwiz.net/techtips/win32-callconv-asm.html
 // https://en.wikipedia.org/wiki/X86_calling_conventions#cdecl
@@ -39,6 +43,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	private int variableOffset = 0;
 	private int branchCounter = 0;
 	private String specialParallelVariableName = null;
+
+	private Deque<Map<Interval, Type>> typeCache = new LinkedList<>();
 
 	private static final int INT_SIZE = 4;
 	private static final int FLOAT_SIZE = 4;
@@ -148,7 +154,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					throw new RuntimeException();
 				}
 				if (variableOffset == 0) { // global
-					// emit(ctx, ".bss"); // XXX
 					emit2(ctx, ".lcomm " + variable.name + ", " + size);
 					variable.address = variable.name;
 				} else { // stack
@@ -169,16 +174,19 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			if (ctx.getChildCount() != 1)
 				throw new RuntimeException(
 						"Parallel iterator modification is forbidden: " + name);
-			// XXX is it really ?
+			// XXX is it really?
+			cacheType(ctx, Type.INT);
 			emit2(ctx, "pushl (%ebx)");
 			return;
 		}
 		VariableSymbol variable = getVariable(name);
 		switch (ctx.getChildCount()) {
 		case 1:
+			cacheType(ctx, variable.type);
 			emit2(ctx, "pushl " + variable.address);
 			break;
 		case 2:
+			cacheType(ctx, variable.type);
 			emit2(ctx, "pushl " + variable.address);
 			boolean inc = ctx.getChild(1).getText().equals("++");
 			switch (variable.type) {
@@ -191,17 +199,20 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			switch (variable.type) {
 			case INT_POINTER:
 			case INT_ARRAY:
+				cacheType(ctx, Type.INT);
 				size = INT_SIZE;
 				break;
 			case FLOAT_POINTER:
 			case FLOAT_ARRAY:
+				cacheType(ctx, Type.FLOAT);
 				size = FLOAT_SIZE;
 				break;
 			default:
 				throw new RuntimeException();
 			}
-			emit2(ctx, "movl $" + variable.address + ", %eax");
-			emit2(ctx, "add $" + size + ", %eax");
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "imul $" + size + ", %eax");
+			emit2(ctx, "add $" + variable.address + ", %eax");
 			emit2(ctx, "push (%eax)");
 			break;
 		}
@@ -210,12 +221,14 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	@Override
 	public void exitPrimaryExpressionWithInteger(
 			PrimaryExpressionWithIntegerContext ctx) {
+		cacheType(ctx, Type.INT);
 		emit2(ctx, "pushl $" + ctx.getText());
 	}
 
 	@Override
 	public void exitPrimaryExpressionWithFloat(
 			PrimaryExpressionWithFloatContext ctx) {
+		cacheType(ctx, Type.FLOAT);
 		emit2(ctx,
 				"pushl $"
 						+ Float.floatToRawIntBits(Float.parseFloat(ctx
@@ -246,110 +259,238 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		if (functionSymbol.parameters.size() != ctx.expression().size())
 			throw new RuntimeException("Invalid argument count for call: "
 					+ ctx.getText());
-		int pushedInts = 0;
+		int size = 0;
+		Iterator<VariableSymbol> parameter = functionSymbol.parameters
+				.iterator();
 		for (int i = ctx.getChildCount() - 1; i >= 0; --i) {
 			String code = codeMap.remove(ctx.getChild(i));
 			if (code == null)
 				continue;
 			emit(ctx, code);
-			++pushedInts;
-			// TODO other types
-			// TODO check argument types
+			Type type = getCachedType(ctx.getChild(i));
+			Type wantedType = parameter.next().type;
+			// TODO type cast ptr←/→array
+			// TODO maybe float→int (warning)
+			if (type == Type.INT && wantedType == Type.FLOAT)
+				castIntToFloat(ctx);
+			else if (type != wantedType)
+				throw new RuntimeException("Wrong argument type for call: "
+						+ ctx.getText());
+			switch (wantedType) {
+			case INT:
+				size += INT_SIZE;
+				break;
+			case FLOAT:
+				size += FLOAT_SIZE;
+				break;
+			case INT_POINTER:
+			case FLOAT_POINTER:
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				size += POINTER_SIZE;
+				break;
+			}
 		}
 		// TODO save our registers (the one used in the parallel loop)
+		// so as to follow cdecl
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
-		emit2(ctx, "add $" + pushedInts * INT_SIZE + ", %esp");
+		emit2(ctx, "add $" + size + ", %esp");
 		emit2(ctx, "push %eax");
+		cacheType(ctx, functionSymbol.returnType);
 	}
 
 	@Override
 	public void exitUnaryExpression(UnaryExpressionContext ctx) {
-		if (ctx.getChildCount() == 1)
+		if (ctx.getChildCount() == 1) {
+			cacheType(ctx, getCachedType(ctx.primaryExpression()));
 			return;
+		}
 		// TODO other types
-		emit2(ctx, "pop %eax");
 		String operator = ctx.getChild(0).getText();
+		Type type = getCachedType(ctx.unaryExpression());
+		Type returnType = null;
 		switch (operator) {
 		case "-":
-			emit2(ctx, "neg %eax");
+			switch (type) {
+			case INT:
+				returnType = Type.INT;
+				emit2(ctx, "pop %eax");
+				emit2(ctx, "neg %eax");
+				emit2(ctx, "push %eax");
+				break;
+			case INT_POINTER:
+			case FLOAT_POINTER:
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				break;
+			}
 			break;
 		case "!":
-			emit2(ctx, "test %eax, %eax");
-			emit2(ctx, "lahf");
-			emit2(ctx, "shrw $14, %ax");
-			emit2(ctx, "and $1, %eax");
+			switch (type) {
+			case INT:
+			case INT_POINTER:
+			case FLOAT_POINTER:
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				returnType = Type.INT;
+				emit2(ctx, "pop %eax");
+				emit2(ctx, "test %eax, %eax");
+				emit2(ctx, "lahf");
+				emit2(ctx, "shrw $14, %ax");
+				emit2(ctx, "and $1, %eax");
+				emit2(ctx, "push %eax");
+				break;
+			}
 			break;
 		}
-		emit2(ctx, "push %eax");
+		if (returnType != null)
+			cacheType(ctx, returnType);
+		else
+			throw new RuntimeException("Cannot apply unary operator: "
+					+ ctx.getText());
 	}
 
 	@Override
 	public void exitBinaryExpression(BinaryExpressionContext ctx) {
-		if (ctx.getChildCount() == 1)
+		if (ctx.getChildCount() == 1) {
+			cacheType(ctx, getCachedType(ctx.unaryExpression()));
 			return;
-		// TODO other types
-		String operator = ctx.getChild(1).getText();
-		emit2(ctx, "pop %ecx");
-		emit2(ctx, "pop %eax");
-		String label = null;
-		switch (operator) {
-		case "*":
-			emit2(ctx, "imul %ecx, %eax");
+		}
+		Type type1 = getCachedType(ctx.binaryExpression(0));
+		Type type2 = getCachedType(ctx.binaryExpression(1));
+		Type returnType = null;
+		if (type1 == Type.INT && type2 == Type.INT)
+			returnType = Type.INT;
+		else if (type1 == Type.FLOAT && type2 == Type.FLOAT)
+			returnType = Type.FLOAT;
+		else if (type1 == Type.INT && type2 == Type.FLOAT) {
+			emit2(ctx, "pop %ecx");
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "push %ecx");
 			emit2(ctx, "push %eax");
-			break;
-		case "+":
-			emit2(ctx, "add %ecx, %eax");
-			emit2(ctx, "push %eax");
-			break;
-		case "-":
-			emit2(ctx, "sub %ecx, %eax");
-			emit2(ctx, "push %eax");
-			break;
-		case "<":
-		case ">":
-		case "<=":
-		case ">=":
-		case "==":
-		case "!=":
-			label = newLabel() + "skip";
-			emit2(ctx, "mov $0, %ecx");
-			emit2(ctx, "cmp %ecx, %eax");
-			switch (operator) {
-			case ">":
-				emit2(ctx, "jng " + label);
+			castIntToFloat(ctx);
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "pop %ecx");
+			returnType = Type.FLOAT;
+		} else if (type1 == Type.FLOAT && type2 == Type.INT) {
+			castIntToFloat(ctx);
+			returnType = Type.FLOAT;
+		}
+		if (returnType != null) {
+			switch (returnType) {
+			case INT:
+				String operator = ctx.getChild(1).getText();
+				String label = null;
+				switch (operator) {
+				case "*":
+					emit2(ctx, "imul %ecx, %eax");
+					emit2(ctx, "push %eax");
+					break;
+				case "+":
+					emit2(ctx, "add %ecx, %eax");
+					emit2(ctx, "push %eax");
+					break;
+				case "-":
+					emit2(ctx, "sub %ecx, %eax");
+					emit2(ctx, "push %eax");
+					break;
+				case "<":
+				case ">":
+				case "<=":
+				case ">=":
+				case "==":
+				case "!=":
+					label = newLabel() + "skip";
+					emit2(ctx, "cmp %ecx, %eax");
+					emit2(ctx, "mov $0, %ecx");
+					switch (operator) {
+					case ">":
+						emit2(ctx, "jng " + label);
+						break;
+					case "<":
+						emit2(ctx, "jnl " + label);
+						break;
+					case ">=":
+						emit2(ctx, "jnge " + label);
+						break;
+					case "<=":
+						emit2(ctx, "jnle " + label);
+						break;
+					case "==":
+						emit2(ctx, "jne " + label);
+						break;
+					case "!=":
+						emit2(ctx, "je " + label);
+						break;
+					}
+					emit2(ctx, "inc %ecx");
+					emit(ctx, label + ":");
+					emit2(ctx, "push %ecx");
+					break;
+				}
 				break;
-			case "<":
-				emit2(ctx, "jnl " + label);
-				break;
-			case ">=":
-				emit2(ctx, "jnge " + label);
-				break;
-			case "<=":
-				emit2(ctx, "jnle " + label);
-				break;
-			case "==":
-				emit2(ctx, "jne " + label);
-				break;
-			case "!=":
-				emit2(ctx, "je " + label);
+			case INT_POINTER:
+			case FLOAT_POINTER:
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				returnType = null;
 				break;
 			}
-			emit2(ctx, "inc %ecx");
-			emit(ctx, label + ":");
-			emit2(ctx, "push %ecx");
-			break;
 		}
+		if (returnType != null)
+			cacheType(ctx, returnType);
+		else
+			throw new RuntimeException("Cannot apply binary operator: "
+					+ ctx.getText());
+	}
+
+	private void castIntToFloat(RuleContext ctx) {
+		emit2(ctx, "cvtsi2ss (%esp), %xmm0");
+		emit2(ctx, "movss %xmm0, (%esp)");
 	}
 
 	@Override
 	public void exitExpressionWithAssignment(ExpressionWithAssignmentContext ctx) {
-		String name = ctx.IDENTIFIER().getText();
-		if (name.equals(specialParallelVariableName))
+		VariableSymbol variable = getVariable(ctx.IDENTIFIER().getText());
+		if (variable.name.equals(specialParallelVariableName))
 			throw new RuntimeException(
-					"Parallel iterator modification is forbidden: " + name);
-		// TODO other types
+					"Parallel iterator modification is forbidden: "
+							+ variable.name);
+		Type type = getCachedType(ctx.binaryExpression());
+		if (type == null)
+			throw new RuntimeException("Cannot assign void: " + ctx.getText());
+		String castName = variable.type + "=" + type;
+		if (ctx.getChild(1).getText().equals("["))
+			castName = castName.replace("_ARRAY=", "=")
+					.replace("_POINTER", "=");
+		if (castName.contains("_ARRAY="))
+			throw new RuntimeException("Cannot assign to array variable: "
+					+ ctx.getText());
+		log(ctx, "cast: " + castName + " in " + ctx.getText());
+		switch (castName) {
+		case "INT=INT":
+			cacheType(ctx, Type.INT);
+		case "FLOAT=FLOAT":
+			cacheType(ctx, Type.FLOAT);
+		case "INT_POINTER=INT_POINTER":
+		case "INT_POINTER=INT_ARRAY":
+			cacheType(ctx, Type.INT_POINTER);
+		case "FLOAT_POINTER=FLOAT_POINTER":
+		case "FLOAT_POINTER=FLOAT_ARRAY":
+			cacheType(ctx, Type.FLOAT_POINTER);
+			break;
+		case "FLOAT=INT":
+			castIntToFloat(ctx);
+			break;
+		case "INT=FLOAT":
+			log(ctx, "todo: float to int cast"); // TODO
+			break;
+		default:
+			throw new RuntimeException("Invalid cast " + castName + " in: "
+					+ ctx.getText());
+		}
 		emit2(ctx, "mov (%esp), %eax");
-		emit2(ctx, "mov %eax, " + getVariable(name).address);
+		emit2(ctx, "mov %eax, " + variable.address);
 	}
 
 	@Override
@@ -465,11 +606,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	@Override
 	public void enterStatement(StatementContext ctx) {
 		log(ctx, "enter statement: " + ctx.getText());
+		typeCache.push(new HashMap<>());
 	}
 
 	@Override
 	public void exitStatement(StatementContext ctx) {
 		ignoreExpressionValue(ctx.expression());
+		typeCache.pop();
 		log(ctx, "exit statement: " + ctx.getText());
 	}
 
@@ -496,7 +639,26 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		FunctionSymbol function = new FunctionSymbol();
 		// FIXME check if declarator is valid
 		function.name = declarator.declarator().getText();
-		function.returnType = returnType.getText();
+		switch (returnType.getText()) {
+		case "void":
+			function.returnType = null;
+			break;
+		case "int":
+			function.returnType = Type.INT;
+			break;
+		case "float":
+			function.returnType = Type.FLOAT;
+			break;
+		case "int*":
+			function.returnType = Type.INT_POINTER;
+			break;
+		case "float*":
+			function.returnType = Type.FLOAT_POINTER;
+			break;
+		default:
+			throw new RuntimeException("Invalid return type: " + returnType
+					+ " " + declarator);
+		}
 		for (ParameterDeclarationContext parameter : declarator
 				.parameterDeclaration()) {
 			function.parameters.add(createVariable(parameter.typeName(),
@@ -538,10 +700,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			variable.name = declarator.getText();
 			switch (typeName.getText()) {
 			case "int":
-				variable.type = VariableSymbol.Type.INT;
+				variable.type = Type.INT;
 				break;
 			case "float":
-				variable.type = VariableSymbol.Type.FLOAT;
+				variable.type = Type.FLOAT;
 				break;
 			}
 			break;
@@ -550,10 +712,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				variable.name = declarator.getChild(1).getText();
 				switch (typeName.getText()) {
 				case "int":
-					variable.type = VariableSymbol.Type.INT_POINTER;
+					variable.type = Type.INT_POINTER;
 					break;
 				case "float":
-					variable.type = VariableSymbol.Type.FLOAT_POINTER;
+					variable.type = Type.FLOAT_POINTER;
 					break;
 				}
 			}
@@ -563,10 +725,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				variable.name = declarator.getChild(0).getText();
 				switch (typeName.getText()) {
 				case "int":
-					variable.type = VariableSymbol.Type.INT_ARRAY;
+					variable.type = Type.INT_ARRAY;
 					break;
 				case "float":
-					variable.type = VariableSymbol.Type.FLOAT_ARRAY;
+					variable.type = Type.FLOAT_ARRAY;
 					break;
 				}
 			}
@@ -576,6 +738,16 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		else
 			throw new RuntimeException("Invalid declaration of variable: "
 					+ variable.name);
+	}
+
+	private void cacheType(RuleContext ctx, Type type) {
+		typeCache.element().put(ctx.getSourceInterval(), type);
+		log(ctx, ctx.getText() + "="
+				+ (type != null ? type.toString() : "VOID"));
+	}
+
+	private Type getCachedType(ParseTree ctx) {
+		return typeCache.element().get(ctx.getSourceInterval());
 	}
 
 	private String newLabel() {

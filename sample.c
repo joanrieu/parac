@@ -15,15 +15,15 @@ void foo(float a) {
 #pragma omp parallel for
 	for (i = 0; i < 10; i++)
 		printint(i);
-	if (k > 1000)
+	if (k[1] > 1000)
 		printfloat(a);
 	printint(k[1]);
 }
 
 int main() {
 	int l[2];
-	l[1] = 1337;
+	l[1] = 1336+1.;
 	k = l;
-	foo(42.);
+	foo(l[1]);
 	return 0;
 }
