@@ -6,6 +6,12 @@ void printfloat(float x);
 
 void foo(float a) {
 	int i;
+	i = 1234;
+	printint(i);
+	printint(i);
+	printint(i);
+	printint(i);
+	printint(i);
 #pragma omp parallel for
 	for (i = 0; i < 10; i++)
 		printint(i);

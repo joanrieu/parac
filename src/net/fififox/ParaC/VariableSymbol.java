@@ -11,7 +11,7 @@ public class VariableSymbol extends Symbol {
 
 	@Override
 	public String toString() {
-		return type + " " + name;
+		return type + " " + name + "<" + address + ">";
 	}
 
 }

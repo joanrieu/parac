@@ -73,8 +73,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit(ctx, ".global " + function.name);
 		emit(ctx, function.name + ":");
 		pushSymbolTable();
-		emit2(ctx, "push %ebp");
-		emit2(ctx, "mov %esp, %ebp");
 		variableOffset = 2 * INT_SIZE;
 		for (VariableSymbol parameter : function.parameters) {
 			parameter.address = variableOffset + "(%ebp)";
@@ -87,16 +85,15 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				break;
 			case INT_POINTER:
 			case FLOAT_POINTER:
-				variableOffset += POINTER_SIZE;
-				break;
 			case INT_ARRAY:
 			case FLOAT_ARRAY:
-				throw new RuntimeException(
-						"Array forbidden in function prototype, use a pointer: "
-								+ parameter.name);
+				variableOffset += POINTER_SIZE;
+				break;
 			}
 			addSymbol(parameter);
 		}
+		emit2(ctx, "push %ebp");
+		emit2(ctx, "mov %esp, %ebp");
 		variableOffset = -INT_SIZE;
 	}
 
@@ -140,26 +137,24 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					size = POINTER_SIZE;
 					break;
 				case INT_ARRAY:
-					size = INT_SIZE
-							* Integer
-									.parseInt(declarator.ICONSTANT().getText());
+					size = Integer.parseInt(declarator.ICONSTANT().getText())
+							* INT_SIZE;
 					break;
 				case FLOAT_ARRAY:
-					size = FLOAT_SIZE
-							* Integer
-									.parseInt(declarator.ICONSTANT().getText());
+					size = Integer.parseInt(declarator.ICONSTANT().getText())
+							* FLOAT_SIZE;
 					break;
 				default:
 					throw new RuntimeException();
 				}
 				if (variableOffset == 0) { // global
 					// emit(ctx, ".bss"); // XXX
-					emit2(ctx, ".lcomm " + variable.name + ", " + INT_SIZE);
+					emit2(ctx, ".lcomm " + variable.name + ", " + size);
 					variable.address = variable.name;
 				} else { // stack
 					emit2(ctx, "sub $" + size + ", %esp");
-					variableOffset -= size;
 					variable.address = variableOffset + "(%ebp)";
+					variableOffset -= size;
 				}
 				addSymbol(variable);
 			}
@@ -184,23 +179,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			emit2(ctx, "pushl " + variable.address);
 			break;
 		case 2:
-			switch (ctx.getChild(1).getText()) {
-			case "++":
-				switch (variable.type) {
-				case INT:
-					emit2(ctx, "incl " + variable.address);
-					break;
-				}
-				break;
-			case "--":
-				switch (variable.type) {
-				case INT:
-					emit2(ctx, "decl " + variable.address);
-					break;
-				}
+			emit2(ctx, "pushl " + variable.address);
+			boolean inc = ctx.getChild(1).getText().equals("++");
+			switch (variable.type) {
+			case INT:
+				emit2(ctx, (inc ? "incl " : "decl ") + variable.address);
 				break;
 			}
-			emit2(ctx, "pushl %eax");
 		case 4:
 			int size;
 			switch (variable.type) {
@@ -271,6 +256,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			// TODO other types
 			// TODO check argument types
 		}
+		// TODO save our registers (the one used in the parallel loop)
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
 		emit2(ctx, "add $" + pushedInts * INT_SIZE + ", %esp");
 		emit2(ctx, "push %eax");
@@ -362,9 +348,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			throw new RuntimeException(
 					"Parallel iterator modification is forbidden: " + name);
 		// TODO other types
-		emit2(ctx, "pop %eax");
+		emit2(ctx, "mov (%esp), %eax");
 		emit2(ctx, "mov %eax, " + getVariable(name).address);
-		emit2(ctx, "push %eax");
 	}
 
 	@Override
@@ -586,7 +571,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				}
 			}
 		}
-		log(null, variable.toString());
 		if (variable.name != null && variable.type != null)
 			return variable;
 		else

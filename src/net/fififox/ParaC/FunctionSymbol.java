@@ -10,7 +10,7 @@ public class FunctionSymbol extends Symbol {
 	
 	@Override
 	public String toString() {
-		return "Function<" + returnType + ", " + name + ", " + parameters + ">";
+		return returnType + " " + name + parameters;
 	}
 
 }
