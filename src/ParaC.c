@@ -10,7 +10,7 @@ void printint(int x) {
 }
 
 void printfloat(float x) {
-	printf("%f", x);
+	printf("%f\n", x);
 }
 
 // internals

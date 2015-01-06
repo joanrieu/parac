@@ -472,6 +472,9 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					emit2(ctx, "addss (%esp), %xmm0");
 					emit2(ctx, "movss %xmm0, (%esp)");
 					break;
+				default:
+					// TODO other operators
+					returnType = null;
 				}
 				break;
 			case INT_POINTER:
@@ -535,7 +538,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			break;
 		case "INT=FLOAT":
 			log(ctx, "todo: float to int cast"); // TODO
-			break;
+			/* break; */
 		default:
 			throw new RuntimeException("Invalid cast " + castName + " in: "
 					+ ctx.getText());
