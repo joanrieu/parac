@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Objects;
 
 import net.fififox.ParaC.ParaCParser.BinaryExpressionContext;
 import net.fififox.ParaC.ParaCParser.CompoundStatementContext;
@@ -195,35 +196,42 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				break;
 			}
 		case 4:
-			int size;
-			switch (variable.type) {
-			case INT_POINTER:
-			case INT_ARRAY:
-				cacheType(ctx, Type.INT);
-				size = INT_SIZE;
-				break;
-			case FLOAT_POINTER:
-			case FLOAT_ARRAY:
-				cacheType(ctx, Type.FLOAT);
-				size = FLOAT_SIZE;
-				break;
-			default:
-				throw new RuntimeException();
-			}
+			computeArrayIndexLocation(ctx, variable, 0);
 			emit2(ctx, "pop %eax");
-			emit2(ctx, "imul $" + size + ", %eax");
-			// XXX hack
-			if (variable.address.endsWith(")")) {
-				int offset = Integer.parseInt(variable.address.replace(
-						"(%ebp)", ""));
-				emit2(ctx, "add $" + offset + ", %eax");
-				emit2(ctx, "add %ebp, %eax");
-			} else {
-				emit2(ctx, "add $" + variable.address + ", %eax");
-			}
 			emit2(ctx, "push (%eax)");
 			break;
 		}
+	}
+
+	private void computeArrayIndexLocation(RuleContext ctx,
+			VariableSymbol variable, int stackIndex) {
+		int size;
+		switch (variable.type) {
+		case INT_POINTER:
+		case INT_ARRAY:
+			cacheType(ctx, Type.INT);
+			size = INT_SIZE;
+			break;
+		case FLOAT_POINTER:
+		case FLOAT_ARRAY:
+			cacheType(ctx, Type.FLOAT);
+			size = FLOAT_SIZE;
+			break;
+		default:
+			throw new RuntimeException();
+		}
+		emit2(ctx, "mov " + stackIndex * size + "(%esp), %eax");
+		emit2(ctx, "imul $" + size + ", %eax");
+		// XXX hack
+		if (variable.address.endsWith(")")) {
+			int offset = Integer.parseInt(variable.address
+					.replace("(%ebp)", ""));
+			emit2(ctx, "add $" + offset + ", %eax");
+			emit2(ctx, "add %ebp, %eax");
+		} else {
+			emit2(ctx, "add $" + variable.address + ", %eax");
+		}
+		emit2(ctx, "mov %eax, " + stackIndex * size + "(%esp)");
 	}
 
 	@Override
@@ -478,21 +486,25 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		if (type == null)
 			throw new RuntimeException("Cannot assign void: " + ctx.getText());
 		String castName = variable.type + "=" + type;
-		if (ctx.getChild(1).getText().equals("["))
+		boolean array = ctx.getChild(1).getText().equals("[");
+		if (array)
 			castName = castName.replace("_ARRAY=", "=")
 					.replace("_POINTER", "=");
 		if (castName.contains("_ARRAY="))
 			throw new RuntimeException("Cannot assign to array variable: "
 					+ ctx.getText());
-		log(ctx, "cast: " + castName + " in " + ctx.getText());
+		log(ctx, ctx.getText() + " → " + castName);
 		switch (castName) {
 		case "INT=INT":
 			cacheType(ctx, Type.INT);
+			break;
 		case "FLOAT=FLOAT":
 			cacheType(ctx, Type.FLOAT);
+			break;
 		case "INT_POINTER=INT_POINTER":
 		case "INT_POINTER=INT_ARRAY":
 			cacheType(ctx, Type.INT_POINTER);
+			break;
 		case "FLOAT_POINTER=FLOAT_POINTER":
 		case "FLOAT_POINTER=FLOAT_ARRAY":
 			cacheType(ctx, Type.FLOAT_POINTER);
@@ -507,8 +519,16 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			throw new RuntimeException("Invalid cast " + castName + " in: "
 					+ ctx.getText());
 		}
-		emit2(ctx, "mov (%esp), %eax");
-		emit2(ctx, "mov %eax, " + variable.address);
+		if (array) {
+			computeArrayIndexLocation(ctx, variable, 1);
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "pop %ecx");
+			emit2(ctx, "push %eax");
+			emit2(ctx, "mov %eax, (%ecx)");
+		} else {
+			emit2(ctx, "mov (%esp), %eax");
+			emit2(ctx, "mov %eax, " + variable.address);
+		}
 	}
 
 	@Override
@@ -617,7 +637,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 
 	@Override
 	public void enterStatement(StatementContext ctx) {
-		log(ctx, "enter statement: " + ctx.getText());
+		log(ctx, "---- " + ctx.getText());
 		typeCache.push(new HashMap<>());
 	}
 
@@ -625,8 +645,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	public void exitStatement(StatementContext ctx) {
 		ignoreExpressionValue(ctx.expression());
 		typeCache.pop();
-		log(ctx, symbolTable.toString());
-		log(ctx, "exit statement: " + ctx.getText());
+		log(ctx, "----");
 	}
 
 	private void ignoreExpressionValue(ExpressionContext ctx) {
@@ -640,6 +659,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	}
 
 	private void popSymbolTable() {
+		log(null, symbolTable.toString());
 		symbolTable.pop();
 	}
 
@@ -754,9 +774,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	}
 
 	private void cacheType(RuleContext ctx, Type type) {
-		typeCache.element().put(ctx.getSourceInterval(), type);
-		log(ctx, ctx.getText() + "="
-				+ (type != null ? type.toString() : "VOID"));
+		Type oldType = typeCache.element().put(ctx.getSourceInterval(), type);
+		if (type != oldType && !Objects.equals(oldType, type))
+			log(ctx, ctx.getText() + " → "
+					+ (type != null ? type.toString() : "VOID"));
 	}
 
 	private Type getCachedType(ParseTree ctx) {
