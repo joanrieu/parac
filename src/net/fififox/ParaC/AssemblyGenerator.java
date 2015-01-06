@@ -400,6 +400,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			emit2(ctx, "push %ecx");
 			emit2(ctx, "push %eax");
 			castIntToFloat(ctx);
+			emit2(ctx, "pop %ecx");
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "push %ecx");
+			emit2(ctx, "push %eax");
 			returnType = Type.FLOAT;
 		} else if (type1 == Type.FLOAT && type2 == Type.INT) {
 			castIntToFloat(ctx);
@@ -409,6 +413,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			String operator = ctx.getChild(1).getText();
 			switch (returnType) {
 			case INT:
+				emit2(ctx, "pop %ecx");
+				emit2(ctx, "pop %eax");
 				String label = null;
 				switch (operator) {
 				case "*":
