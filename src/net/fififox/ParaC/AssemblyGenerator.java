@@ -40,7 +40,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	private Deque<Map<String, Symbol>> symbolTable = new LinkedList<>();
 	private Map<RuleContext, String> codeMap = new HashMap<>();
 	private Deque<RuleContext> buffersChildren = new LinkedList<>();
-	private int variableOffset = 0;
+	private Integer variableOffset = null;
 	private int branchCounter = 0;
 	private String specialParallelVariableName = null;
 
@@ -100,7 +100,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		}
 		emit2(ctx, "push %ebp");
 		emit2(ctx, "mov %esp, %ebp");
-		variableOffset = -INT_SIZE;
+		variableOffset = 0;
 	}
 
 	@Override
@@ -108,7 +108,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit2(ctx, "leave");
 		emit2(ctx, "ret");
 		popSymbolTable();
-		variableOffset = 0;
+		variableOffset = null;
 	}
 
 	@Override
@@ -153,13 +153,13 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				default:
 					throw new RuntimeException();
 				}
-				if (variableOffset == 0) { // global
+				if (variableOffset == null) { // global
 					emit2(ctx, ".lcomm " + variable.name + ", " + size);
 					variable.address = variable.name;
 				} else { // stack
 					emit2(ctx, "sub $" + size + ", %esp");
-					variable.address = variableOffset + "(%ebp)";
 					variableOffset -= size;
+					variable.address = variableOffset + "(%ebp)";
 				}
 				addSymbol(variable);
 			}
@@ -212,7 +212,15 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			}
 			emit2(ctx, "pop %eax");
 			emit2(ctx, "imul $" + size + ", %eax");
-			emit2(ctx, "add $" + variable.address + ", %eax");
+			// XXX hack
+			if (variable.address.endsWith(")")) {
+				int offset = Integer.parseInt(variable.address.replace(
+						"(%ebp)", ""));
+				emit2(ctx, "add $" + offset + ", %eax");
+				emit2(ctx, "add %ebp, %eax");
+			} else {
+				emit2(ctx, "add $" + variable.address + ", %eax");
+			}
 			emit2(ctx, "push (%eax)");
 			break;
 		}
@@ -369,17 +377,15 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			emit2(ctx, "push %ecx");
 			emit2(ctx, "push %eax");
 			castIntToFloat(ctx);
-			emit2(ctx, "pop %eax");
-			emit2(ctx, "pop %ecx");
 			returnType = Type.FLOAT;
 		} else if (type1 == Type.FLOAT && type2 == Type.INT) {
 			castIntToFloat(ctx);
 			returnType = Type.FLOAT;
 		}
 		if (returnType != null) {
+			String operator = ctx.getChild(1).getText();
 			switch (returnType) {
 			case INT:
-				String operator = ctx.getChild(1).getText();
 				String label = null;
 				switch (operator) {
 				case "*":
@@ -429,6 +435,16 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					break;
 				}
 				break;
+			case FLOAT:
+				switch (operator) {
+				case "+":
+					emit2(ctx, "movss (%esp), %xmm0");
+					emit2(ctx, "pop %eax");
+					emit2(ctx, "addss (%esp), %xmm0");
+					emit2(ctx, "movss %xmm0, (%esp)");
+					break;
+				}
+				break;
 			case INT_POINTER:
 			case FLOAT_POINTER:
 			case INT_ARRAY:
@@ -444,6 +460,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					+ ctx.getText());
 	}
 
+	// http://csapp.cs.cmu.edu/public/waside/waside-sse.pdf
+	// type "intel ..."
 	private void castIntToFloat(RuleContext ctx) {
 		emit2(ctx, "cvtsi2ss (%esp), %xmm0");
 		emit2(ctx, "movss %xmm0, (%esp)");
@@ -491,12 +509,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		}
 		emit2(ctx, "mov (%esp), %eax");
 		emit2(ctx, "mov %eax, " + variable.address);
-	}
-
-	@Override
-	public void exitExpressionWithoutAssignment(
-			ExpressionWithoutAssignmentContext ctx) {
-		// TODO other types
 	}
 
 	@Override
@@ -613,6 +625,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	public void exitStatement(StatementContext ctx) {
 		ignoreExpressionValue(ctx.expression());
 		typeCache.pop();
+		log(ctx, symbolTable.toString());
 		log(ctx, "exit statement: " + ctx.getText());
 	}
 
