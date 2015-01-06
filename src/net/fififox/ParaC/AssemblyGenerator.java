@@ -13,7 +13,6 @@ import net.fififox.ParaC.ParaCParser.DeclarationContext;
 import net.fififox.ParaC.ParaCParser.DeclaratorContext;
 import net.fififox.ParaC.ParaCParser.ExpressionContext;
 import net.fififox.ParaC.ParaCParser.ExpressionWithAssignmentContext;
-import net.fififox.ParaC.ParaCParser.ExpressionWithoutAssignmentContext;
 import net.fififox.ParaC.ParaCParser.FunctionDefinitionContext;
 import net.fififox.ParaC.ParaCParser.IterationStatementContext;
 import net.fififox.ParaC.ParaCParser.JumpStatementContext;
@@ -181,38 +180,50 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			return;
 		}
 		VariableSymbol variable = getVariable(name);
-		switch (ctx.getChildCount()) {
-		case 1:
-			cacheType(ctx, variable.type);
-			emit2(ctx, "pushl " + variable.address);
-			break;
-		case 2:
-			cacheType(ctx, variable.type);
-			emit2(ctx, "pushl " + variable.address);
-			boolean inc = ctx.getChild(1).getText().equals("++");
+		if (ctx.getChildCount() <= 2) {
 			switch (variable.type) {
 			case INT:
-				emit2(ctx, (inc ? "incl " : "decl ") + variable.address);
+			case FLOAT:
+				emit2(ctx, "pushl " + variable.address);
+				break;
+			case INT_POINTER:
+			case FLOAT_POINTER:
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				emit2(ctx, "pushl $0");
+				computeArrayIndexLocation(ctx, variable, 0);
 				break;
 			}
-		case 4:
+			cacheType(ctx, variable.type);
+			if (ctx.getChildCount() == 2) {
+				boolean inc = ctx.getChild(1).getText().equals("++");
+				switch (variable.type) {
+				case INT:
+					emit2(ctx, (inc ? "incl " : "decl ") + variable.address);
+					break;
+				}
+			}
+		} else {
 			computeArrayIndexLocation(ctx, variable, 0);
 			emit2(ctx, "pop %eax");
 			emit2(ctx, "push (%eax)");
-			break;
 		}
 	}
 
+	/** @warning has side effect on type cache */
 	private void computeArrayIndexLocation(RuleContext ctx,
-			VariableSymbol variable, int stackIndex) {
+			VariableSymbol variable, int indexStackIndex) {
+		boolean pointer = false;
 		int size;
 		switch (variable.type) {
 		case INT_POINTER:
+			pointer = true;
 		case INT_ARRAY:
 			cacheType(ctx, Type.INT);
 			size = INT_SIZE;
 			break;
 		case FLOAT_POINTER:
+			pointer = true;
 		case FLOAT_ARRAY:
 			cacheType(ctx, Type.FLOAT);
 			size = FLOAT_SIZE;
@@ -220,18 +231,22 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		default:
 			throw new RuntimeException();
 		}
-		emit2(ctx, "mov " + stackIndex * size + "(%esp), %eax");
+		emit2(ctx, "mov " + indexStackIndex * size + "(%esp), %eax");
 		emit2(ctx, "imul $" + size + ", %eax");
-		// XXX hack
-		if (variable.address.endsWith(")")) {
-			int offset = Integer.parseInt(variable.address
-					.replace("(%ebp)", ""));
-			emit2(ctx, "add $" + offset + ", %eax");
-			emit2(ctx, "add %ebp, %eax");
+		if (pointer) {
+			emit2(ctx, "add " + variable.address + ", %eax");
 		} else {
-			emit2(ctx, "add $" + variable.address + ", %eax");
+			// XXX hack
+			if (variable.address.endsWith(")")) {
+				int offset = Integer.parseInt(variable.address.replace(
+						"(%ebp)", ""));
+				emit2(ctx, "add $" + offset + ", %eax");
+				emit2(ctx, "add %ebp, %eax");
+			} else {
+				emit2(ctx, "add $" + variable.address + ", %eax");
+			}
 		}
-		emit2(ctx, "mov %eax, " + stackIndex * size + "(%esp)");
+		emit2(ctx, "mov %eax, " + indexStackIndex * size + "(%esp)");
 	}
 
 	@Override
