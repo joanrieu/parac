@@ -1,5 +1,10 @@
 grammar ParaC;
 
+COMMENT
+:
+	'//' ~[\r\n]* -> skip
+;
+
 WS
 :
 	[ \t\r\n]+ -> skip
