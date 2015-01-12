@@ -73,7 +73,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 
 	@Override
 	public void enterFunctionDefinition(FunctionDefinitionContext ctx) {
-		emit(ctx, ".text");
 		FunctionSymbol function = addFunctionSymbol(ctx.returnType,
 				ctx.declarator());
 		emit(ctx, ".global " + function.name);
