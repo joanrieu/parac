@@ -1,23 +1,15 @@
 package net.fififox.ParaC;
-import net.fififox.ParaC.ParaCLexer;
-import net.fififox.ParaC.ParaCParser;
 
 import org.antlr.v4.runtime.ANTLRFileStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 
-
 public class ParaCCompiler {
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws Exception {
 		ANTLRFileStream input;
-		try {
-			input = new ANTLRFileStream(args[0]);
-		} catch (Exception e) {
-			e.printStackTrace();
-			return;
-		}
+		input = new ANTLRFileStream(args[0]);
 		ParaCLexer lexer = new ParaCLexer(input);
 		ParaCParser parser = new ParaCParser(new CommonTokenStream(lexer));
 		ParserRuleContext tree = parser.program();

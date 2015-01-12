@@ -311,9 +311,10 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			Type type = getCachedType(ctx.getChild(i));
 			Type wantedType = parameter.next().type;
 			// TODO type cast ptr←/→array
-			// TODO maybe float→int (warning)
 			if (type == Type.INT && wantedType == Type.FLOAT)
 				castIntToFloat(ctx);
+			else if (type == Type.FLOAT && wantedType == Type.INT)
+				castFloatToInt(ctx);
 			else if (type != wantedType)
 				throw new RuntimeException("Wrong argument type for call: "
 						+ ctx.getText());
@@ -520,6 +521,11 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit2(ctx, "movss %xmm0, (%esp)");
 	}
 
+	private void castFloatToInt(RuleContext ctx) {
+		throw new RuntimeException("Cannot cast from float to int: "
+				+ ctx.getText());
+	}
+
 	@Override
 	public void exitExpressionWithAssignment(ExpressionWithAssignmentContext ctx) {
 		VariableSymbol variable = getVariable(ctx.IDENTIFIER().getText());
@@ -558,8 +564,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			castIntToFloat(ctx);
 			break;
 		case "INT=FLOAT":
-			log(ctx, "todo: float to int cast"); // TODO
-			/* break; */
+			castFloatToInt(ctx);
+			break;
 		default:
 			throw new RuntimeException("Invalid cast " + castName + " in: "
 					+ ctx.getText());
