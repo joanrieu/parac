@@ -322,8 +322,6 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				break;
 			}
 		}
-		// TODO save our registers (the one used in the parallel loop)
-		// so as to follow cdecl
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
 		emit2(ctx, "add $" + size + ", %esp");
 		emit2(ctx, "push %eax");
