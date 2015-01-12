@@ -202,6 +202,14 @@ public class AssemblyGenerator extends ParaCBaseListener {
 				case INT:
 					emit2(ctx, (inc ? "incl " : "decl ") + variable.address);
 					break;
+				case FLOAT:
+					// TODO break;
+				case INT_POINTER:
+				case FLOAT_POINTER:
+				case INT_ARRAY:
+				case FLOAT_ARRAY:
+					throw new RuntimeException(
+							"Pointer arithmetic is forbidden: " + ctx.getText());
 				}
 			}
 		} else {
