@@ -333,9 +333,9 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			}
 		}
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
+		emit2(ctx, "pop %ebx"); // XXX restore push above
 		emit2(ctx, "add $" + size + ", %esp");
 		emit2(ctx, "push %eax");
-		emit2(ctx, "pop %ebx"); // XXX restore push above
 		cacheType(ctx, functionSymbol.returnType);
 	}
 
