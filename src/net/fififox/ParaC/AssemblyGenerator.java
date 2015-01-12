@@ -292,6 +292,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		if (functionSymbol.parameters.size() != ctx.expression().size())
 			throw new RuntimeException("Invalid argument count for call: "
 					+ ctx.getText());
+		emit2(ctx, "push %ebx"); // XXX used in parallel for
 		int size = 0;
 		Iterator<VariableSymbol> parameter = functionSymbol.parameters
 				.iterator();
@@ -327,6 +328,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
 		emit2(ctx, "add $" + size + ", %esp");
 		emit2(ctx, "push %eax");
+		emit2(ctx, "pop %ebx"); // XXX restore push above
 		cacheType(ctx, functionSymbol.returnType);
 	}
 
