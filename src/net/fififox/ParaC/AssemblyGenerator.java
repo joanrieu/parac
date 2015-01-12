@@ -105,6 +105,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 
 	@Override
 	public void exitFunctionDefinition(FunctionDefinitionContext ctx) {
+		// TODO check return type
 		emit2(ctx, "leave");
 		emit2(ctx, "ret");
 		popSymbolTable();
@@ -113,6 +114,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 
 	@Override
 	public void exitJumpStatement(JumpStatementContext ctx) {
+		// TODO check return type
 		if (ctx.expression() != null)
 			emit2(ctx, "pop %eax");
 		emit2(ctx, "leave");
