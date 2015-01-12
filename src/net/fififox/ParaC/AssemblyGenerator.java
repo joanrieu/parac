@@ -470,8 +470,20 @@ public class AssemblyGenerator extends ParaCBaseListener {
 					emit2(ctx, "addss (%esp), %xmm0");
 					emit2(ctx, "movss %xmm0, (%esp)");
 					break;
+				case "-":
+					emit2(ctx, "movss (%esp), %xmm0");
+					emit2(ctx, "pop %eax");
+					emit2(ctx, "subss (%esp), %xmm0");
+					emit2(ctx, "movss %xmm0, (%esp)");
+					break;
+				case "*":
+					emit2(ctx, "movss (%esp), %xmm0");
+					emit2(ctx, "pop %eax");
+					emit2(ctx, "mulss (%esp), %xmm0");
+					emit2(ctx, "movss %xmm0, (%esp)");
+					break;
 				default:
-					// TODO other operators
+					// TODO float comparison operators
 					returnType = null;
 				}
 				break;
