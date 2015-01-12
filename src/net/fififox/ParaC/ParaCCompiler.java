@@ -1,6 +1,7 @@
 package net.fififox.ParaC;
 
 import org.antlr.v4.runtime.ANTLRFileStream;
+import org.antlr.v4.runtime.BailErrorStrategy;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
@@ -12,6 +13,7 @@ public class ParaCCompiler {
 		input = new ANTLRFileStream(args[0]);
 		ParaCLexer lexer = new ParaCLexer(input);
 		ParaCParser parser = new ParaCParser(new CommonTokenStream(lexer));
+		parser.setErrorHandler(new BailErrorStrategy());
 		ParserRuleContext tree = parser.program();
 		ParseTreeWalker walker = new ParseTreeWalker();
 		AssemblyGenerator assemblyGenerator = new AssemblyGenerator();

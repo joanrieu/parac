@@ -22,7 +22,7 @@ void foo(float a) {
 
 int main() {
 	int l[2];
-	l[1] = 1336+1.;
+	l[1] = 1336+1;
 	k = l;
 	foo(l[1]);
 	return 0;

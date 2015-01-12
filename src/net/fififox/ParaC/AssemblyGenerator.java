@@ -721,7 +721,9 @@ public class AssemblyGenerator extends ParaCBaseListener {
 	private FunctionSymbol addFunctionSymbol(TypeNameContext returnType,
 			DeclaratorContext declarator) {
 		FunctionSymbol function = new FunctionSymbol();
-		// FIXME check if declarator is valid
+		if (declarator.declarator().getChildCount() != 1)
+			throw new RuntimeException("Invalid function name: "
+					+ declarator.declarator().getText());
 		function.name = declarator.declarator().getText();
 		switch (returnType.getText()) {
 		case "void":
@@ -740,8 +742,8 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			function.returnType = Type.FLOAT_POINTER;
 			break;
 		default:
-			throw new RuntimeException("Invalid return type: " + returnType
-					+ " " + declarator);
+			throw new RuntimeException("Invalid return type: "
+					+ returnType.getText() + " " + declarator.getText());
 		}
 		for (ParameterDeclarationContext parameter : declarator
 				.parameterDeclaration()) {
@@ -821,7 +823,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 			return variable;
 		else
 			throw new RuntimeException("Invalid declaration of variable: "
-					+ variable.name);
+					+ declarator.getText());
 	}
 
 	private void cacheType(RuleContext ctx, Type type) {
