@@ -303,7 +303,7 @@ public class AssemblyGenerator extends ParaCBaseListener {
 		int size = 0;
 		Iterator<VariableSymbol> parameter = functionSymbol.parameters
 				.iterator();
-		for (int i = ctx.getChildCount() - 1; i >= 0; --i) {
+		for (int i = 0; i < ctx.getChildCount(); ++i) {
 			String code = codeMap.remove(ctx.getChild(i));
 			if (code == null)
 				continue;
