@@ -152,28 +152,28 @@ public class ParaCCompiler extends ParaCBaseListener {
 	@Override
 	public void exitJumpStatement(JumpStatementContext ctx) {
 		Type type = getCachedType(ctx.expression());
-		if (type == Type.INT && currentFunction.returnType == Type.FLOAT)
+		Type wantedType = currentFunction.returnType;
+		if (type == Type.INT && wantedType == Type.FLOAT)
 			castIntToFloat(ctx);
-		else if (type == Type.FLOAT && currentFunction.returnType == Type.INT)
+		else if (type == Type.FLOAT && wantedType == Type.INT)
 			castFloatToInt(ctx);
-		else if (type == Type.INT_ARRAY || type == Type.FLOAT_ARRAY)
-			throw new RuntimeException("Return value is dangling pointer: "
-					+ ctx.getText());
-		else if (type != currentFunction.returnType)
+		else if ((type == Type.INT_POINTER && wantedType == Type.INT_ARRAY)
+				|| (type == Type.FLOAT_POINTER && wantedType == Type.FLOAT_ARRAY)
+				|| (type == Type.INT_ARRAY && wantedType == Type.INT_POINTER)
+				|| (type == Type.FLOAT_ARRAY && wantedType == Type.FLOAT_POINTER))
+			; // compatible
+		else if (type != wantedType)
 			throw new RuntimeException("Incompatible return type: "
 					+ ctx.getText());
-		if (currentFunction.returnType != null) {
-			switch (currentFunction.returnType) {
+		if (wantedType != null) {
+			switch (wantedType) {
 			case INT:
 			case INT_POINTER:
 			case FLOAT_POINTER:
-				emit2(ctx, "pop %eax");
-				break;
 			case INT_ARRAY:
 			case FLOAT_ARRAY:
-				throw new RuntimeException(
-						"Internal error, expression type should never be "
-								+ type);
+				emit2(ctx, "pop %eax");
+				break;
 			}
 		}
 		emit2(ctx, "leave");
@@ -398,7 +398,17 @@ public class ParaCCompiler extends ParaCBaseListener {
 		}
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
 		emit2(ctx, "add $" + size + ", %esp");
-		emit2(ctx, "push %eax");
+		if (functionSymbol.returnType != null) {
+			switch (functionSymbol.returnType) {
+			case INT:
+			case INT_POINTER:
+			case FLOAT_POINTER:
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				emit2(ctx, "push %eax");
+				break;
+			}
+		}
 		cacheType(ctx, functionSymbol.returnType);
 	}
 
