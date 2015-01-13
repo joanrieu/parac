@@ -177,6 +177,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 			case FLOAT_ARRAY:
 				emit2(ctx, "pop %eax");
 				break;
+			case FLOAT:
+				// TODO move value on stack to cdecl float return position
+				break;
 			}
 		}
 		emit2(ctx, "leave");
@@ -410,6 +413,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 			case FLOAT_ARRAY:
 				emit2(ctx, "push %eax");
 				break;
+			case FLOAT:
+				// TODO save cdecl float return to stack
+				break;
 			}
 		}
 		cacheType(ctx, functionSymbol.returnType);
@@ -433,6 +439,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 				emit2(ctx, "neg %eax");
 				emit2(ctx, "push %eax");
 				break;
+			case FLOAT:
+				// TODO negate float value in stack
+				break;
 			case INT_POINTER:
 			case FLOAT_POINTER:
 			case INT_ARRAY:
@@ -454,6 +463,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 				emit2(ctx, "shrw $14, %ax");
 				emit2(ctx, "and $1, %eax");
 				emit2(ctx, "push %eax");
+				break;
+			case FLOAT:
+				// TODO apply float == 0.f
 				break;
 			}
 			break;
@@ -670,7 +682,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		emitBuffered(ctx.expression());
 		Type type = getCachedType(ctx.expression());
 		if (type == null)
-			throw new RuntimeException("Cannot breanch on void expression: "
+			throw new RuntimeException("Cannot branch on void expression: "
 					+ ctx.expression().getText());
 		switch (type) {
 		case INT:
@@ -680,6 +692,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 		case FLOAT_ARRAY:
 			emit2(ctx, "pop %eax");
 			emit2(ctx, "cmp $0, %eax");
+			break;
+		case FLOAT:
+			// TODO apply float == 0.f or emit error
 			break;
 		}
 		emit2(ctx, "je " + elseLabel);
@@ -717,6 +732,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 		case FLOAT_ARRAY:
 			emit2(ctx, "pop %eax");
 			emit2(ctx, "cmp $0, %eax");
+			break;
+		case FLOAT:
+			// TODO apply float == 0.f or emit error
 			break;
 		}
 		emit2(ctx, "je " + endLabel);
