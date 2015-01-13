@@ -466,10 +466,21 @@ public class ParaCCompiler extends ParaCBaseListener {
 				break;
 			case FLOAT:
 				returnType = Type.FLOAT;
-				// FIXME x87
-				emit2(ctx, "flds (%esp)");
-				emit2(ctx, "fchs");
-				emit2(ctx, "fstp (%esp)");
+				// Flip highest bit
+				// - with regular instructions:
+				// emit2(ctx, "pop %eax");
+				// emit2(ctx, "xor $0x80000000, %eax");
+				// emit2(ctx, "push %eax");
+				// - with x87 FPU instructions:
+				// emit2(ctx, "flds (%esp)");
+				// emit2(ctx, "fchs");
+				// emit2(ctx, "fstp (%esp)");
+				// - with SSE instructions:
+				emit2(ctx, "movl $" + Float.floatToRawIntBits(-0.f) + ", "
+						+ -FLOAT_SIZE + "(%esp)");
+				emit2(ctx, "movss " + -FLOAT_SIZE + "(%esp), %xmm0");
+				emit2(ctx, "xorps (%esp), %xmm0");
+				emit2(ctx, "movss %xmm0, (%esp)");
 				break;
 			case INT_POINTER:
 			case FLOAT_POINTER:
