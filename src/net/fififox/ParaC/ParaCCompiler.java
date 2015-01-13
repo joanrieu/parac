@@ -737,9 +737,25 @@ public class ParaCCompiler extends ParaCBaseListener {
 	}
 
 	private void ignoreExpressionValue(ExpressionContext ctx) {
-		// TODO other types
-		if (ctx != null)
+		if (ctx == null)
+			return;
+		switch (getCachedType(ctx)) {
+		case INT:
 			emit2(ctx, "add $" + INT_SIZE + ", %esp");
+			break;
+		case FLOAT:
+			emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
+			break;
+		case INT_POINTER:
+		case FLOAT_POINTER:
+			emit2(ctx, "add $" + POINTER_SIZE + ", %esp");
+			break;
+		case INT_ARRAY:
+		case FLOAT_ARRAY:
+			throw new RuntimeException(
+					"Internal error, expression type should never be "
+							+ getCachedType(ctx));
+		}
 	}
 
 	private void pushSymbolTable() {
