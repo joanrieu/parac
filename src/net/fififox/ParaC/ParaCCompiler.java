@@ -418,7 +418,6 @@ public class ParaCCompiler extends ParaCBaseListener {
 			cacheType(ctx, getCachedType(ctx.primaryExpression()));
 			return;
 		}
-		// TODO float -/!
 		String operator = ctx.getChild(0).getText();
 		Type type = getCachedType(ctx.unaryExpression());
 		Type returnType = null;
@@ -666,9 +665,20 @@ public class ParaCCompiler extends ParaCBaseListener {
 		String elseLabel = label + "else";
 		String endLabel = label + "end";
 		emitBuffered(ctx.expression());
-		// FIXME if-condition type check
-		emit2(ctx, "pop %eax");
-		emit2(ctx, "cmp $0, %eax");
+		Type type = getCachedType(ctx.expression());
+		if (type == null)
+			throw new RuntimeException("Cannot breanch on void expression: "
+					+ ctx.expression().getText());
+		switch (type) {
+		case INT:
+		case INT_POINTER:
+		case FLOAT_POINTER:
+		case INT_ARRAY:
+		case FLOAT_ARRAY:
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "cmp $0, %eax");
+			break;
+		}
 		emit2(ctx, "je " + elseLabel);
 		emitBuffered(ctx.statement(0));
 		emit2(ctx, "jmp " + endLabel);
@@ -692,9 +702,20 @@ public class ParaCCompiler extends ParaCBaseListener {
 		ignoreExpressionValue(ctx.init);
 		emit(ctx, testLabel + ":");
 		emitBuffered(ctx.condition);
-		// FIXME while-condition type check
-		emit2(ctx, "pop %eax");
-		emit2(ctx, "cmp $0, %eax");
+		Type type = getCachedType(ctx.condition);
+		if (type == null)
+			throw new RuntimeException("Cannot breanch on void expression: "
+					+ ctx.condition.getText());
+		switch (type) {
+		case INT:
+		case INT_POINTER:
+		case FLOAT_POINTER:
+		case INT_ARRAY:
+		case FLOAT_ARRAY:
+			emit2(ctx, "pop %eax");
+			emit2(ctx, "cmp $0, %eax");
+			break;
+		}
 		emit2(ctx, "je " + endLabel);
 		emitBuffered(ctx.statement());
 		emitBuffered(ctx.next);
