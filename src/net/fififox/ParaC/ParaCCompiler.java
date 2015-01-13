@@ -359,8 +359,6 @@ public class ParaCCompiler extends ParaCBaseListener {
 		if (functionSymbol.parameters.size() != ctx.expression().size())
 			throw new RuntimeException("Invalid argument count for call: "
 					+ ctx.getText());
-		if (parallelIterator != null)
-			emit2(ctx, "push %ebx");
 		int size = 0;
 		Iterator<VariableSymbol> parameter = functionSymbol.parameters
 				.iterator();
@@ -399,8 +397,6 @@ public class ParaCCompiler extends ParaCBaseListener {
 			}
 		}
 		emit2(ctx, "call " + ctx.IDENTIFIER().getText());
-		if (parallelIterator != null)
-			emit2(ctx, "pop %ebx");
 		emit2(ctx, "add $" + size + ", %esp");
 		emit2(ctx, "push %eax");
 		cacheType(ctx, functionSymbol.returnType);
