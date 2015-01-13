@@ -17,7 +17,8 @@ void foo(float a) {
 	for (i = 0; i < 10; i++)
 		printint(i);
 	if (k[1] > 1000)
-		printfloat(a);
+		printfloat(a--);
+	printfloat(a);
 	printint(k[1]);
 }
 

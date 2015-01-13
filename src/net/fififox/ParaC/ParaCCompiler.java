@@ -286,8 +286,13 @@ public class ParaCCompiler extends ParaCBaseListener {
 					emit2(ctx, (inc ? "incl " : "decl ") + variable.address);
 					break;
 				case FLOAT:
-					// TODO float ++/--
-					// break;
+					emit2(ctx, "movl $" + Float.floatToRawIntBits(1) + ", -"
+							+ FLOAT_SIZE + "(%esp)");
+					emit2(ctx, "movss (%esp), %xmm0");
+					emit2(ctx, (inc ? "addss " : "subss ") + -FLOAT_SIZE
+							+ "(%esp), %xmm0");
+					emit2(ctx, "movss %xmm0, " + variable.address);
+					break;
 				case INT_POINTER:
 				case FLOAT_POINTER:
 				case INT_ARRAY:
@@ -556,7 +561,6 @@ public class ParaCCompiler extends ParaCBaseListener {
 			case INT:
 				emit2(ctx, "pop %ecx");
 				emit2(ctx, "pop %eax");
-				String label = null;
 				switch (operator) {
 				case "*":
 					emit2(ctx, "imul %ecx, %eax");
