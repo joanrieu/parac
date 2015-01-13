@@ -489,7 +489,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 				returnType = Type.INT;
 				emit2(ctx, "xor %eax, %eax");
 				emit2(ctx, "pxor %xmm0, %xmm0");
-				emit2(ctx, "ucomiss (%esp), %xmm0");
+				emit2(ctx, "comiss (%esp), %xmm0");
 				emit2(ctx, "setz %al");
 				emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
 				emit2(ctx, "push %eax");
@@ -580,35 +580,69 @@ public class ParaCCompiler extends ParaCBaseListener {
 					case "!=":
 						emit2(ctx, "je " + label);
 						break;
+					default:
+						returnType = null;
 					}
 					emit2(ctx, "inc %ecx");
 					emit(ctx, label + ":");
 					emit2(ctx, "push %ecx");
 					break;
+				default:
+					returnType = null;
 				}
 				break;
 			case FLOAT:
+				emit2(ctx, "movss (%esp), %xmm0");
+				emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
 				switch (operator) {
 				case "+":
-					emit2(ctx, "movss (%esp), %xmm0");
-					emit2(ctx, "pop %eax");
 					emit2(ctx, "addss (%esp), %xmm0");
 					emit2(ctx, "movss %xmm0, (%esp)");
 					break;
 				case "-":
-					emit2(ctx, "movss (%esp), %xmm0");
-					emit2(ctx, "pop %eax");
 					emit2(ctx, "subss (%esp), %xmm0");
 					emit2(ctx, "movss %xmm0, (%esp)");
 					break;
 				case "*":
-					emit2(ctx, "movss (%esp), %xmm0");
-					emit2(ctx, "pop %eax");
 					emit2(ctx, "mulss (%esp), %xmm0");
 					emit2(ctx, "movss %xmm0, (%esp)");
 					break;
+				case "<":
+				case ">":
+				case "<=":
+				case ">=":
+				case "==":
+				case "!=":
+					returnType = Type.INT;
+					emit2(ctx, "movss (%esp), %xmm1");
+					emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
+					emit2(ctx, "xor %eax, %eax");
+					emit2(ctx, "comiss %xmm0, %xmm1");
+					switch (operator) {
+					case "<":
+						emit2(ctx, "setb %al");
+						break;
+					case ">":
+						emit2(ctx, "seta %al");
+						break;
+					case "<=":
+						emit2(ctx, "setbe %al");
+						break;
+					case ">=":
+						emit2(ctx, "setae %al");
+						break;
+					case "==":
+						emit2(ctx, "sete %al");
+						break;
+					case "!=":
+						emit2(ctx, "setne %al");
+						break;
+					default:
+						returnType = null;
+					}
+					emit2(ctx, "push %eax");
+					break;
 				default:
-					// TODO float comparison
 					returnType = null;
 				}
 				break;
@@ -723,7 +757,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		case FLOAT:
 			emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
 			emit2(ctx, "pxor %xmm0, %xmm0");
-			emit2(ctx, "ucomiss " + -FLOAT_SIZE + "(%esp), %xmm0");
+			emit2(ctx, "comiss " + -FLOAT_SIZE + "(%esp), %xmm0");
 			break;
 		}
 		emit2(ctx, "je " + elseLabel);
@@ -765,7 +799,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		case FLOAT:
 			emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
 			emit2(ctx, "pxor %xmm0, %xmm0");
-			emit2(ctx, "ucomiss " + -FLOAT_SIZE + "(%esp), %xmm0");
+			emit2(ctx, "comiss " + -FLOAT_SIZE + "(%esp), %xmm0");
 			break;
 		}
 		emit2(ctx, "je " + endLabel);

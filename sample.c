@@ -39,5 +39,6 @@ int main() {
 		printfloat(1234);
 	else
 		printfloat(5678);
+	printint(1.001 == 1);
 	return 0;
 }
