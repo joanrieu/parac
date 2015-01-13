@@ -459,6 +459,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 				break;
 			case FLOAT:
 				returnType = Type.FLOAT;
+				// FIXME x87
 				emit2(ctx, "flds (%esp)");
 				emit2(ctx, "fchs");
 				emit2(ctx, "fstp (%esp)");
@@ -486,7 +487,13 @@ public class ParaCCompiler extends ParaCBaseListener {
 				emit2(ctx, "push %eax");
 				break;
 			case FLOAT:
-				// TODO apply float == 0.f
+				returnType = Type.INT;
+				emit2(ctx, "xor %eax, %eax");
+				emit2(ctx, "pxor %xmm0, %xmm0");
+				emit2(ctx, "ucomiss (%esp), %xmm0");
+				emit2(ctx, "setz %al");
+				emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
+				emit2(ctx, "push %eax");
 				break;
 			}
 			break;

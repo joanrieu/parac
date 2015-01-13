@@ -23,6 +23,7 @@ void foo(float a) {
 void foo(float b);
 
 float bar(float x) {
+	printint(!x);
 	return -x;
 }
 
