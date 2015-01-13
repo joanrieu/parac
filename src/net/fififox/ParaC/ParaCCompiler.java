@@ -21,6 +21,7 @@ import net.fififox.ParaC.ParaCParser.JumpStatementContext;
 import net.fififox.ParaC.ParaCParser.ParallelIterationStatementContext;
 import net.fififox.ParaC.ParaCParser.ParameterDeclarationContext;
 import net.fififox.ParaC.ParaCParser.PrimaryExpressionWithCallContext;
+import net.fififox.ParaC.ParaCParser.PrimaryExpressionWithExpressionContext;
 import net.fififox.ParaC.ParaCParser.PrimaryExpressionWithFloatContext;
 import net.fififox.ParaC.ParaCParser.PrimaryExpressionWithIdentifierContext;
 import net.fififox.ParaC.ParaCParser.PrimaryExpressionWithIntegerContext;
@@ -356,6 +357,12 @@ public class ParaCCompiler extends ParaCBaseListener {
 				"pushl $"
 						+ Float.floatToRawIntBits(Float.parseFloat(ctx
 								.getText())));
+	}
+
+	@Override
+	public void exitPrimaryExpressionWithExpression(
+			PrimaryExpressionWithExpressionContext ctx) {
+		cacheType(ctx, getCachedType(ctx.expression()));
 	}
 
 	@Override

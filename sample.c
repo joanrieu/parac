@@ -7,6 +7,7 @@ void printfloat(float x);
 void foo(float a) {
 	int i;
 	i = 1234;
+	a = (1 + a * 2) * .5;
 	printint(i);
 	printint(i);
 	printint(i);
