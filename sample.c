@@ -20,6 +20,8 @@ void foo(float a) {
 	printint(k[1]);
 }
 
+void foo(float b);
+
 float bar(float x) {
 	return -x;
 }

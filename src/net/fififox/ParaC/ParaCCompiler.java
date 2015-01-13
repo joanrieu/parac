@@ -73,6 +73,22 @@ public class ParaCCompiler extends ParaCBaseListener {
 			return returnType + " " + name + parameters;
 		}
 
+		@Override
+		public boolean equals(Object obj) {
+			if (obj instanceof FunctionSymbol) {
+				FunctionSymbol function = (FunctionSymbol) obj;
+				if (!function.name.equals(name)
+						|| function.returnType != returnType
+						|| function.parameters.size() != parameters.size())
+					return false;
+				for (int i = 0; i < parameters.size(); ++i)
+					if (function.parameters.get(i).type != parameters.get(i).type)
+						return false;
+				return true;
+			} else
+				return false;
+		}
+
 	}
 
 	private Deque<Map<String, Symbol>> symbolTable = new LinkedList<>();
@@ -850,8 +866,11 @@ public class ParaCCompiler extends ParaCBaseListener {
 		symbolTable.pop();
 	}
 
-	private Symbol addSymbol(Symbol symbol) {
-		return symbolTable.element().put(symbol.name, symbol);
+	private void addSymbol(Symbol symbol) {
+		Symbol old = symbolTable.element().put(symbol.name, symbol);
+		if (old != null && !old.equals(symbol))
+			throw new RuntimeException("Incompatible declarations of symbol: "
+					+ symbol.name);
 	}
 
 	private FunctionSymbol addFunctionSymbol(TypeNameContext returnType,
@@ -885,10 +904,6 @@ public class ParaCCompiler extends ParaCBaseListener {
 				.parameterDeclaration()) {
 			function.parameters.add(createVariable(parameter.typeName(),
 					parameter.declarator()));
-		}
-		Symbol oldSymbol = findSymbol(function.name);
-		if (oldSymbol != null) {
-			// TODO function double declaration type check
 		}
 		addSymbol(function);
 		return function;
