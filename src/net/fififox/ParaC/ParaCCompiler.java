@@ -141,7 +141,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	@Override
 	public void exitFunctionDefinition(FunctionDefinitionContext ctx) {
-		// TODO check return type
+		// FIXME end-of-function return type check
 		emit2(ctx, "leave");
 		emit2(ctx, "ret");
 		popSymbolTable();
@@ -150,7 +150,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	@Override
 	public void exitJumpStatement(JumpStatementContext ctx) {
-		// TODO check return type
+		// FIXME mid-function return type check
 		if (ctx.expression() != null)
 			emit2(ctx, "pop %eax");
 		emit2(ctx, "leave");
@@ -239,7 +239,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 					emit2(ctx, (inc ? "incl " : "decl ") + variable.address);
 					break;
 				case FLOAT:
-					// TODO break;
+					// TODO float ++/--
+					// break;
 				case INT_POINTER:
 				case FLOAT_POINTER:
 				case INT_ARRAY:
@@ -281,7 +282,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		if (pointer) {
 			emit2(ctx, "add " + variable.address + ", %eax");
 		} else {
-			// XXX hack
+			// XXX variable offset from address string hack
 			if (variable.address.endsWith(")")) {
 				int offset = Integer.parseInt(variable.address.replace(
 						"(%ebp)", ""));
@@ -388,7 +389,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 			cacheType(ctx, getCachedType(ctx.primaryExpression()));
 			return;
 		}
-		// TODO other types
+		// TODO float -/!
 		String operator = ctx.getChild(0).getText();
 		Type type = getCachedType(ctx.unaryExpression());
 		Type returnType = null;
@@ -537,7 +538,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 					emit2(ctx, "movss %xmm0, (%esp)");
 					break;
 				default:
-					// TODO float comparison operators
+					// TODO float comparison
 					returnType = null;
 				}
 				break;
@@ -636,7 +637,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		String elseLabel = label + "else";
 		String endLabel = label + "end";
 		emitBuffered(ctx.expression());
-		// TODO other types
+		// FIXME if-condition type check
 		emit2(ctx, "pop %eax");
 		emit2(ctx, "cmp $0, %eax");
 		emit2(ctx, "je " + elseLabel);
@@ -662,7 +663,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		ignoreExpressionValue(ctx.init);
 		emit(ctx, testLabel + ":");
 		emitBuffered(ctx.condition);
-		// TODO other types
+		// FIXME while-condition type check
 		emit2(ctx, "pop %eax");
 		emit2(ctx, "cmp $0, %eax");
 		emit2(ctx, "je " + endLabel);
@@ -811,9 +812,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		}
 		Symbol oldSymbol = findSymbol(function.name);
 		if (oldSymbol != null) {
-			// TODO check if identical
-			// throw new RuntimeException("Symbol already defined: " +
-			// function.name);
+			// TODO function double declaration type check
 		}
 		addSymbol(function);
 		return function;
