@@ -35,5 +35,9 @@ int main() {
 	printfloat(bar(42));
 	if (!!1234)
 		printint(1234);
+	if (0.)
+		printfloat(1234);
+	else
+		printfloat(5678);
 	return 0;
 }

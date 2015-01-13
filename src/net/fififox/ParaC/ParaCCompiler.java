@@ -721,7 +721,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 			emit2(ctx, "cmp $0, %eax");
 			break;
 		case FLOAT:
-			// TODO apply float == 0.f or emit error
+			emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
+			emit2(ctx, "pxor %xmm0, %xmm0");
+			emit2(ctx, "ucomiss " + -FLOAT_SIZE + "(%esp), %xmm0");
 			break;
 		}
 		emit2(ctx, "je " + elseLabel);
@@ -761,7 +763,9 @@ public class ParaCCompiler extends ParaCBaseListener {
 			emit2(ctx, "cmp $0, %eax");
 			break;
 		case FLOAT:
-			// TODO apply float == 0.f or emit error
+			emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
+			emit2(ctx, "pxor %xmm0, %xmm0");
+			emit2(ctx, "ucomiss " + -FLOAT_SIZE + "(%esp), %xmm0");
 			break;
 		}
 		emit2(ctx, "je " + endLabel);
