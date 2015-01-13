@@ -33,5 +33,7 @@ int main() {
 	k = l;
 	foo(l[1]);
 	printfloat(bar(42));
+	if (!!1234)
+		printint(1234);
 	return 0;
 }

@@ -480,11 +480,10 @@ public class ParaCCompiler extends ParaCBaseListener {
 			case FLOAT_ARRAY:
 				returnType = Type.INT;
 				emit2(ctx, "pop %eax");
+				emit2(ctx, "xor %ecx, %ecx");
 				emit2(ctx, "test %eax, %eax");
-				emit2(ctx, "lahf");
-				emit2(ctx, "shrw $14, %ax");
-				emit2(ctx, "and $1, %eax");
-				emit2(ctx, "push %eax");
+				emit2(ctx, "setz %cl");
+				emit2(ctx, "push %ecx");
 				break;
 			case FLOAT:
 				returnType = Type.INT;
