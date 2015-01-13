@@ -80,6 +80,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 	private Deque<RuleContext> buffersChildren = new LinkedList<>();
 	private Map<RuleContext, String> codeMap = new HashMap<>();
 	private int branchCounter = 0;
+	private FunctionSymbol currentFunction = null;
 	private Integer variableOffset = null;
 	private VariableSymbol parallelIterator = null;
 
@@ -110,13 +111,12 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	@Override
 	public void enterFunctionDefinition(FunctionDefinitionContext ctx) {
-		FunctionSymbol function = addFunctionSymbol(ctx.returnType,
-				ctx.declarator());
-		emit(ctx, ".global " + function.name);
-		emit(ctx, function.name + ":");
+		currentFunction = addFunctionSymbol(ctx.returnType, ctx.declarator());
+		emit(ctx, ".global " + currentFunction.name);
+		emit(ctx, currentFunction.name + ":");
 		pushSymbolTable();
 		variableOffset = 2 * INT_SIZE;
-		for (VariableSymbol parameter : function.parameters) {
+		for (VariableSymbol parameter : currentFunction.parameters) {
 			parameter.address = variableOffset + "(%ebp)";
 			switch (parameter.type) {
 			case INT:
@@ -146,13 +146,36 @@ public class ParaCCompiler extends ParaCBaseListener {
 		emit2(ctx, "ret");
 		popSymbolTable();
 		variableOffset = null;
+		currentFunction = null;
 	}
 
 	@Override
 	public void exitJumpStatement(JumpStatementContext ctx) {
-		// FIXME mid-function return type check
-		if (ctx.expression() != null)
-			emit2(ctx, "pop %eax");
+		Type type = getCachedType(ctx.expression());
+		if (type == Type.INT && currentFunction.returnType == Type.FLOAT)
+			castIntToFloat(ctx);
+		else if (type == Type.FLOAT && currentFunction.returnType == Type.INT)
+			castFloatToInt(ctx);
+		else if (type == Type.INT_ARRAY || type == Type.FLOAT_ARRAY)
+			throw new RuntimeException("Return value is dangling pointer: "
+					+ ctx.getText());
+		else if (type != currentFunction.returnType)
+			throw new RuntimeException("Incompatible return type: "
+					+ ctx.getText());
+		if (currentFunction.returnType != null) {
+			switch (currentFunction.returnType) {
+			case INT:
+			case INT_POINTER:
+			case FLOAT_POINTER:
+				emit2(ctx, "pop %eax");
+				break;
+			case INT_ARRAY:
+			case FLOAT_ARRAY:
+				throw new RuntimeException(
+						"Internal error, expression type should never be "
+								+ type);
+			}
+		}
 		emit2(ctx, "leave");
 		emit2(ctx, "ret");
 	}
@@ -744,9 +767,10 @@ public class ParaCCompiler extends ParaCBaseListener {
 	}
 
 	private void ignoreExpressionValue(ExpressionContext ctx) {
-		if (ctx == null)
+		Type type = getCachedType(ctx);
+		if (type == null)
 			return;
-		switch (getCachedType(ctx)) {
+		switch (type) {
 		case INT:
 			emit2(ctx, "add $" + INT_SIZE + ", %esp");
 			break;
@@ -760,8 +784,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		case INT_ARRAY:
 		case FLOAT_ARRAY:
 			throw new RuntimeException(
-					"Internal error, expression type should never be "
-							+ getCachedType(ctx));
+					"Internal error, expression type should never be " + type);
 		}
 	}
 
@@ -892,7 +915,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 	}
 
 	private Type getCachedType(ParseTree ctx) {
-		return typeCache.element().get(ctx.getSourceInterval());
+		return ctx != null ? typeCache.element().get(ctx.getSourceInterval())
+				: null;
 	}
 
 	private String newLabel() {
