@@ -20,8 +20,8 @@ void foo(float a) {
 	printint(k[1]);
 }
 
-float bar() {
-	return 42;
+float bar(float x) {
+	return -x;
 }
 
 int main() {
@@ -29,6 +29,6 @@ int main() {
 	l[1] = 1336+1;
 	k = l;
 	foo(l[1]);
-	printfloat(bar());
+	printfloat(bar(42));
 	return 0;
 }

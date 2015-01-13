@@ -442,7 +442,10 @@ public class ParaCCompiler extends ParaCBaseListener {
 				emit2(ctx, "push %eax");
 				break;
 			case FLOAT:
-				// TODO negate float value in stack
+				returnType = Type.FLOAT;
+				emit2(ctx, "flds (%esp)");
+				emit2(ctx, "fchs");
+				emit2(ctx, "fstp (%esp)");
 				break;
 			case INT_POINTER:
 			case FLOAT_POINTER:
