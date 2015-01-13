@@ -141,9 +141,12 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	@Override
 	public void exitFunctionDefinition(FunctionDefinitionContext ctx) {
-		// FIXME end-of-function return type check
-		emit2(ctx, "leave");
-		emit2(ctx, "ret");
+		if (currentFunction.returnType == null) {
+			emit2(ctx, "leave");
+			emit2(ctx, "ret");
+		} else {
+			log(ctx, "leave/ret should already have been emitted by a return");
+		}
 		popSymbolTable();
 		variableOffset = null;
 		currentFunction = null;
