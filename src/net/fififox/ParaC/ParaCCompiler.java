@@ -178,7 +178,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 				emit2(ctx, "pop %eax");
 				break;
 			case FLOAT:
-				// TODO move value on stack to cdecl float return position
+				emit2(ctx, "flds (%esp)");
+				emit2(ctx, "add $" + FLOAT_SIZE + ", %esp");
 				break;
 			}
 		}
@@ -414,7 +415,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 				emit2(ctx, "push %eax");
 				break;
 			case FLOAT:
-				// TODO save cdecl float return to stack
+				emit2(ctx, "sub $" + FLOAT_SIZE + ", %esp");
+				emit2(ctx, "fstp (%esp)");
 				break;
 			}
 		}

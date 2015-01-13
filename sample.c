@@ -20,10 +20,15 @@ void foo(float a) {
 	printint(k[1]);
 }
 
+float bar() {
+	return 42;
+}
+
 int main() {
 	int l[2];
 	l[1] = 1336+1;
 	k = l;
 	foo(l[1]);
+	printfloat(bar());
 	return 0;
 }
