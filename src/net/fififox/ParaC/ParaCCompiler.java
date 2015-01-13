@@ -76,13 +76,12 @@ public class ParaCCompiler extends ParaCBaseListener {
 	}
 
 	private Deque<Map<String, Symbol>> symbolTable = new LinkedList<>();
-	private Map<RuleContext, String> codeMap = new HashMap<>();
-	private Deque<RuleContext> buffersChildren = new LinkedList<>();
-	private Integer variableOffset = null;
-	private int branchCounter = 0;
-	private String specialParallelVariableName = null;
-
 	private Deque<Map<Interval, Type>> typeCache = new LinkedList<>();
+	private Deque<RuleContext> buffersChildren = new LinkedList<>();
+	private Map<RuleContext, String> codeMap = new HashMap<>();
+	private int branchCounter = 0;
+	private Integer variableOffset = null;
+	private VariableSymbol parallelIterator = null;
 
 	private static final int INT_SIZE = 4;
 	private static final int FLOAT_SIZE = 4;
@@ -208,17 +207,16 @@ public class ParaCCompiler extends ParaCBaseListener {
 	@Override
 	public void exitPrimaryExpressionWithIdentifier(
 			PrimaryExpressionWithIdentifierContext ctx) {
-		String name = ctx.IDENTIFIER().getText();
-		if (name.equals(specialParallelVariableName)) {
+		VariableSymbol variable = getVariable(ctx.IDENTIFIER().getText());
+		if (variable == parallelIterator) {
 			if (ctx.getChildCount() != 1)
 				throw new RuntimeException(
-						"Parallel iterator modification is forbidden: " + name);
-			// XXX is it really?
+						"Parallel iterator modification is forbidden: "
+								+ parallelIterator.name);
 			cacheType(ctx, Type.INT);
 			emit2(ctx, "pushl (%ebx)");
 			return;
 		}
-		VariableSymbol variable = getVariable(name);
 		if (ctx.getChildCount() <= 2) {
 			switch (variable.type) {
 			case INT:
@@ -567,10 +565,10 @@ public class ParaCCompiler extends ParaCBaseListener {
 	@Override
 	public void exitExpressionWithAssignment(ExpressionWithAssignmentContext ctx) {
 		VariableSymbol variable = getVariable(ctx.IDENTIFIER().getText());
-		if (variable.name.equals(specialParallelVariableName))
+		if (variable == parallelIterator)
 			throw new RuntimeException(
 					"Parallel iterator modification is forbidden: "
-							+ variable.name);
+							+ parallelIterator.name);
 		Type type = getCachedType(ctx.binaryExpression());
 		if (type == null)
 			throw new RuntimeException("Cannot assign void: " + ctx.getText());
@@ -672,18 +670,19 @@ public class ParaCCompiler extends ParaCBaseListener {
 	@Override
 	public void enterParallelIterationStatement(
 			ParallelIterationStatementContext ctx) {
-		// FIXME check if declared
-		// FIXME store symbol instead of name (cannot shadow otherwise)
-		if (specialParallelVariableName != null)
+		if (parallelIterator != null)
 			throw new RuntimeException("Parallel loops cannot be nested");
 		buffersChildren.add(ctx);
-		String iName = ctx.i1.getText();
-		if (!iName.equals(ctx.i2.getText())
+		String iterator = ctx.i1.getText();
+		if (!iterator.equals(ctx.i2.getText())
 				|| !ctx.i2.getText().equals(ctx.i3.getText()))
 			throw new RuntimeException(
-					"Only one identifier can be used as index: " + iName + ", "
-							+ ctx.i2.getText() + ", " + ctx.i3.getText());
-		specialParallelVariableName = iName;
+					"Only one identifier can be used as iterator: " + iterator
+							+ ", " + ctx.i2.getText() + ", " + ctx.i3.getText());
+		parallelIterator = getVariable(iterator);
+		if (parallelIterator.type != Type.INT)
+			throw new RuntimeException("Parallel iterator must be an int: "
+					+ parallelIterator.name);
 	}
 
 	@Override
@@ -721,7 +720,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		emit2(ctx, "movl $0, __parac_parallel_for_thread");
 		emit2(ctx, "movl $0, __parac_parallel_for_ebp");
 		emit2(ctx, "movl $0, __parac_parallel_for_esp");
-		specialParallelVariableName = null;
+		parallelIterator = null;
 	}
 
 	@Override
