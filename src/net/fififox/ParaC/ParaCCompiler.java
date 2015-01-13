@@ -346,11 +346,15 @@ public class ParaCCompiler extends ParaCBaseListener {
 			emit(ctx, code);
 			Type type = getCachedType(ctx.getChild(i));
 			Type wantedType = parameter.next().type;
-			// TODO type cast ptr←/→array
 			if (type == Type.INT && wantedType == Type.FLOAT)
 				castIntToFloat(ctx);
 			else if (type == Type.FLOAT && wantedType == Type.INT)
 				castFloatToInt(ctx);
+			else if ((type == Type.INT_POINTER && wantedType == Type.INT_ARRAY)
+					|| (type == Type.FLOAT_POINTER && wantedType == Type.FLOAT_ARRAY)
+					|| (type == Type.INT_ARRAY && wantedType == Type.INT_POINTER)
+					|| (type == Type.FLOAT_ARRAY && wantedType == Type.FLOAT_POINTER))
+				; // compatible
 			else if (type != wantedType)
 				throw new RuntimeException("Wrong argument type for call: "
 						+ ctx.getText());
