@@ -39,7 +39,7 @@ int main() {
 	if (0.)
 		printfloat(1234);
 	else
-		printfloat(5678);
+		printfloat(-1234);
 	printint(1.001 == 1);
 	return 0;
 }

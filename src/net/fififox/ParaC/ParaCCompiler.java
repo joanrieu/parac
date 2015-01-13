@@ -565,34 +565,31 @@ public class ParaCCompiler extends ParaCBaseListener {
 				case ">=":
 				case "==":
 				case "!=":
-					label = newLabel() + "skip";
 					emit2(ctx, "cmp %ecx, %eax");
-					emit2(ctx, "mov $0, %ecx");
+					emit2(ctx, "mov $0, %eax");
 					switch (operator) {
-					case ">":
-						emit2(ctx, "jng " + label);
-						break;
 					case "<":
-						emit2(ctx, "jnl " + label);
+						emit2(ctx, "setb %al");
 						break;
-					case ">=":
-						emit2(ctx, "jnge " + label);
+					case ">":
+						emit2(ctx, "seta %al");
 						break;
 					case "<=":
-						emit2(ctx, "jnle " + label);
+						emit2(ctx, "setbe %al");
+						break;
+					case ">=":
+						emit2(ctx, "setae %al");
 						break;
 					case "==":
-						emit2(ctx, "jne " + label);
+						emit2(ctx, "sete %al");
 						break;
 					case "!=":
-						emit2(ctx, "je " + label);
+						emit2(ctx, "setne %al");
 						break;
 					default:
 						returnType = null;
 					}
-					emit2(ctx, "inc %ecx");
-					emit(ctx, label + ":");
-					emit2(ctx, "push %ecx");
+					emit2(ctx, "push %eax");
 					break;
 				default:
 					returnType = null;
