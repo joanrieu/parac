@@ -984,12 +984,16 @@ public class ParaCCompiler extends ParaCBaseListener {
 			DeclaratorContext declarator) {
 		FunctionSymbol function = new FunctionSymbol();
 		DeclaratorContext nameDeclarator = declarator.declarator();
-		// FIXME throwing away pointer as a return type
-		if (nameDeclarator.getChildCount() != 1)
+		boolean pointer = false;
+		if (nameDeclarator.getChildCount() == 2
+				&& nameDeclarator.getChild(0).getText().startsWith("*")) {
+			pointer = true;
+		}
+		else if (nameDeclarator.getChildCount() != 1)
 			throw new CompileException(nameDeclarator,
 					"invalid function declaration");
-		function.name = nameDeclarator.getText();
-		switch (returnType.getText()) {
+		function.name = nameDeclarator.IDENTIFIER().getText();
+		switch (returnType.getText() + (pointer ? "*" : "")) {
 		case "void":
 			function.returnType = null;
 			break;
@@ -1143,7 +1147,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 			try {
 				input = new ANTLRFileStream(filename);
 			} catch (Exception e) {
-				System.err.println("error: cannot open source file: " + filename);
+				System.err.println("error: cannot open source file: "
+						+ filename);
 				System.exit(1);
 			}
 			ParaCParser parser = new ParaCParser(new CommonTokenStream(

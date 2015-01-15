@@ -30,10 +30,15 @@ float bar(float x) {
 	return -x;
 }
 
+int* baz(int* m) {
+	m[0] = -1;
+	return m;
+}
+
 int main() {
 	int l[2];
 	l[1] = 1336+1;
-	k = l;
+	k = baz(l);
 	foo(l[1]);
 	printfloat(bar(42));
 	if (!!1234)
