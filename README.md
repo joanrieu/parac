@@ -7,6 +7,7 @@ ParaC is a small C-like compiler.
 - Uses SSE for floating point arithmetic.
 - Follows CDECL (ie the output is compatible with GCC-compiled C code).
 - Support library includes `printint` and `printfloat` functions.
+- Nice error messages with errors underlined in the source
 
 ## How it works
 - Uses ANTLR4.
@@ -29,3 +30,4 @@ Use the `test.sh` script to do that in one command:
 ## Future improvements
 - Avoid successive push/pop inside an expression.
 - Enable 64 bit mode.
+- String support
