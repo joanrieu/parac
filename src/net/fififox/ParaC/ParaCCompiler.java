@@ -931,7 +931,14 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	@Override
 	public void enterStatement(StatementContext ctx) {
-		log(ctx, "---- " + ctx.getText());
+		log(ctx,
+				"---- "
+						+ ctx.start
+								.getInputStream()
+								.getText(
+										Interval.of(ctx.start.getStartIndex(),
+												ctx.stop.getStopIndex()))
+								.replace('\n', ' '));
 		typeCache.push(new HashMap<>());
 	}
 
@@ -988,8 +995,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		if (nameDeclarator.getChildCount() == 2
 				&& nameDeclarator.getChild(0).getText().startsWith("*")) {
 			pointer = true;
-		}
-		else if (nameDeclarator.getChildCount() != 1)
+		} else if (nameDeclarator.getChildCount() != 1)
 			throw new CompileException(nameDeclarator,
 					"invalid function declaration");
 		function.name = nameDeclarator.IDENTIFIER().getText();
