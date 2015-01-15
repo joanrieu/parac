@@ -32,14 +32,11 @@ import net.fififox.ParaC.ParaCParser.TypeNameContext;
 import net.fififox.ParaC.ParaCParser.UnaryExpressionContext;
 
 import org.antlr.v4.runtime.ANTLRFileStream;
-import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.BailErrorStrategy;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.misc.Interval;
-import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 
@@ -991,7 +988,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 		DeclaratorContext nameDeclarator = declarator.declarator();
 		// FIXME throwing away pointer as a return type
 		if (nameDeclarator.getChildCount() != 1)
-			throw new CompileException(nameDeclarator, "invalid function declaration");
+			throw new CompileException(nameDeclarator,
+					"invalid function declaration");
 		function.name = nameDeclarator.getText();
 		switch (returnType.getText()) {
 		case "void":
@@ -1137,14 +1135,29 @@ public class ParaCCompiler extends ParaCBaseListener {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ParaCParser parser = new ParaCParser(new CommonTokenStream(
-				new ParaCLexer(new ANTLRFileStream(args[0]))));
-		parser.setErrorHandler(new BailErrorStrategy());
-		try {
-			new ParseTreeWalker().walk(new ParaCCompiler(), parser.program());
-		} catch (CompileException e) {
-			System.err.println(e.getMessage(parser));
+		if (args.length == 0) {
+			System.err.println("error: missing source file");
+			System.err.println("USAGE: ParaC CFILE [CFILE...]");
 			System.exit(1);
+		}
+		for (String filename : args) {
+			ANTLRFileStream input = null;
+			try {
+				input = new ANTLRFileStream(filename);
+			} catch (Exception e) {
+				System.err.println("error: cannot open source file: " + filename);
+				System.exit(1);
+			}
+			ParaCParser parser = new ParaCParser(new CommonTokenStream(
+					new ParaCLexer(input)));
+			parser.setErrorHandler(new BailErrorStrategy());
+			try {
+				new ParseTreeWalker().walk(new ParaCCompiler(),
+						parser.program());
+			} catch (CompileException e) {
+				System.err.println(e.getMessage(parser));
+				System.exit(1);
+			}
 		}
 	}
 
