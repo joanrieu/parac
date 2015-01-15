@@ -32,11 +32,14 @@ import net.fififox.ParaC.ParaCParser.TypeNameContext;
 import net.fififox.ParaC.ParaCParser.UnaryExpressionContext;
 
 import org.antlr.v4.runtime.ANTLRFileStream;
+import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.BailErrorStrategy;
+import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.misc.Interval;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 
@@ -44,15 +47,15 @@ import org.antlr.v4.runtime.tree.ParseTreeWalker;
 // https://en.wikipedia.org/wiki/X86_calling_conventions#cdecl
 public class ParaCCompiler extends ParaCBaseListener {
 
-	public enum Type {
+	private enum Type {
 		INT, FLOAT, INT_POINTER, FLOAT_POINTER, INT_ARRAY, FLOAT_ARRAY;
 	}
 
-	abstract public class Symbol {
+	abstract private class Symbol {
 		public String name;
 	}
 
-	public class VariableSymbol extends Symbol {
+	private class VariableSymbol extends Symbol {
 
 		public Type type;
 		public String address;
@@ -64,7 +67,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	}
 
-	public class FunctionSymbol extends Symbol {
+	private class FunctionSymbol extends Symbol {
 
 		public Type returnType;
 		public List<VariableSymbol> parameters = new ArrayList<>();
@@ -92,10 +95,67 @@ public class ParaCCompiler extends ParaCBaseListener {
 
 	}
 
+	private static class CompileException extends RuntimeException {
+
+		private static final long serialVersionUID = 1L;
+		private ParserRuleContext context;
+
+		public CompileException(ParserRuleContext context, String message) {
+			super(message);
+			this.context = context;
+		}
+
+		public String getMessage(ParaCParser parser) {
+			Interval sourceInterval = Interval.of(
+					getContext().start.getStartIndex(),
+					getContext().stop.getStopIndex());
+			CharStream inputStream = getContext().start.getInputStream();
+			String previousText = inputStream.getText(Interval.of(0,
+					sourceInterval.a));
+			Interval lineInterval = Interval.of(
+					previousText.lastIndexOf('\n') + 1, sourceInterval.b);
+			int lineNum = previousText.split("\n").length;
+			int colNum = 1 + sourceInterval.a - lineInterval.a;
+			while (!inputStream.getText(lineInterval).endsWith("\n"))
+				++lineInterval.b;
+			String lines = inputStream.getText(lineInterval);
+			StringBuilder message = new StringBuilder(
+					inputStream.getSourceName());
+			message.append(':').append(lineNum).append(':').append(colNum)
+					.append(": error: ").append(super.getMessage())
+					.append('\n');
+			int position = 0;
+			System.err.println(sourceInterval);
+			for (String line : lines.split("\n")) {
+				message.append(line).append('\n');
+				byte[] chars = line.getBytes();
+				for (int i = 0; i < chars.length; ++i) {
+					int sourcePosition = lineInterval.a + position + i;
+					System.err.println(sourcePosition);
+					if (" \t\r\n".indexOf(chars[i]) == -1) {
+						if (sourcePosition >= sourceInterval.a
+								&& sourcePosition <= sourceInterval.b)
+							chars[i] = '^';
+						else
+							chars[i] = ' ';
+					}
+				}
+				position += line.length() + 1;
+				message.append(new String(chars)).append('\n');
+			}
+			return message.toString();
+		}
+
+		public ParserRuleContext getContext() {
+			return context;
+		}
+
+	}
+
 	private Deque<Map<String, Symbol>> symbolTable = new LinkedList<>();
 	private Deque<Map<Interval, Type>> typeCache = new LinkedList<>();
-	private Deque<RuleContext> buffersChildren = new LinkedList<>();
-	private Map<RuleContext, String> codeMap = new HashMap<>();
+	private Deque<ParserRuleContext> buffersChildren = new LinkedList<>();
+	private Map<ParserRuleContext, String> codeMap = new HashMap<>();
 	private int branchCounter = 0;
 	private FunctionSymbol currentFunction = null;
 	private Integer variableOffset = null;
@@ -113,7 +173,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 	@Override
 	public void exitProgram(ProgramContext ctx) {
 		if (!codeMap.isEmpty())
-			throw new RuntimeException("codeMap = " + codeMap);
+			throw new IllegalStateException("codeMap = " + codeMap);
 	}
 
 	@Override
@@ -149,7 +209,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 				variableOffset += POINTER_SIZE;
 				break;
 			}
-			addSymbol(parameter);
+			addSymbol(ctx, parameter);
 		}
 		emit2(ctx, "push %ebp");
 		emit2(ctx, "mov %esp, %ebp");
@@ -183,8 +243,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 				|| (type == Type.FLOAT_ARRAY && wantedType == Type.FLOAT_POINTER))
 			; // compatible
 		else if (type != wantedType)
-			throw new RuntimeException("Incompatible return type: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "incompatible return type");
 		if (wantedType != null) {
 			switch (wantedType) {
 			case INT:
@@ -246,7 +305,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 					variableOffset -= size;
 					variable.address = variableOffset + "(%ebp)";
 				}
-				addSymbol(variable);
+				addSymbol(declarator, variable);
 			}
 		}
 	}
@@ -254,12 +313,11 @@ public class ParaCCompiler extends ParaCBaseListener {
 	@Override
 	public void exitPrimaryExpressionWithIdentifier(
 			PrimaryExpressionWithIdentifierContext ctx) {
-		VariableSymbol variable = getVariable(ctx.IDENTIFIER().getText());
+		VariableSymbol variable = getVariable(ctx, ctx.IDENTIFIER().getText());
 		if (variable == parallelIterator) {
 			if (ctx.getChildCount() != 1)
-				throw new RuntimeException(
-						"Parallel iterator modification is forbidden: "
-								+ parallelIterator.name);
+				throw new CompileException(ctx,
+						"parallel iterator modification is forbidden");
 			cacheType(ctx, Type.INT);
 			emit2(ctx, "pushl (%ebx)");
 			return;
@@ -297,8 +355,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 				case FLOAT_POINTER:
 				case INT_ARRAY:
 				case FLOAT_ARRAY:
-					throw new RuntimeException(
-							"Pointer arithmetic is forbidden: " + ctx.getText());
+					throw new CompileException(ctx,
+							"pointer arithmetic is forbidden");
 				}
 			}
 		} else {
@@ -309,7 +367,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 	}
 
 	/** @warning has side effect on type cache */
-	private void computeArrayIndexLocation(RuleContext ctx,
+	private void computeArrayIndexLocation(ParserRuleContext ctx,
 			VariableSymbol variable, int indexStackIndex) {
 		boolean pointer = false;
 		int size;
@@ -327,7 +385,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 			size = FLOAT_SIZE;
 			break;
 		default:
-			throw new RuntimeException();
+			throw new IllegalArgumentException();
 		}
 		emit2(ctx, "mov " + indexStackIndex * size + "(%esp), %eax");
 		emit2(ctx, "imul $" + size + ", %eax");
@@ -385,15 +443,12 @@ public class ParaCCompiler extends ParaCBaseListener {
 		try {
 			functionSymbol = (FunctionSymbol) findSymbol(functionName);
 		} catch (ClassCastException e) {
-			throw new RuntimeException("Symbol is not a function for call: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "symbol is not a function for call");
 		}
 		if (functionSymbol == null)
-			throw new RuntimeException("No such function for call: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "no such function for call");
 		if (functionSymbol.parameters.size() != ctx.expression().size())
-			throw new RuntimeException("Invalid argument count for call: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "invalid argument count for call");
 		int size = 0;
 		Iterator<VariableSymbol> parameter = functionSymbol.parameters
 				.iterator();
@@ -414,8 +469,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 					|| (type == Type.FLOAT_ARRAY && wantedType == Type.FLOAT_POINTER))
 				; // compatible
 			else if (type != wantedType)
-				throw new RuntimeException("Wrong argument type for call: "
-						+ ctx.getText());
+				throw new CompileException(ctx, "wrong argument type for call");
 			switch (wantedType) {
 			case INT:
 				size += INT_SIZE;
@@ -523,8 +577,7 @@ public class ParaCCompiler extends ParaCBaseListener {
 		if (returnType != null)
 			cacheType(ctx, returnType);
 		else
-			throw new RuntimeException("Cannot apply unary operator: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "cannot apply unary operator");
 	}
 
 	@Override
@@ -676,40 +729,36 @@ public class ParaCCompiler extends ParaCBaseListener {
 		if (returnType != null)
 			cacheType(ctx, returnType);
 		else
-			throw new RuntimeException("Cannot apply binary operator: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "cannot apply binary operator");
 	}
 
 	// http://csapp.cs.cmu.edu/public/waside/waside-sse.pdf
 	// type "intel ..."
-	private void castIntToFloat(RuleContext ctx) {
+	private void castIntToFloat(ParserRuleContext ctx) {
 		emit2(ctx, "cvtsi2ss (%esp), %xmm0");
 		emit2(ctx, "movss %xmm0, (%esp)");
 	}
 
-	private void castFloatToInt(RuleContext ctx) {
-		throw new RuntimeException("Cannot cast from float to int: "
-				+ ctx.getText());
+	private void castFloatToInt(ParserRuleContext ctx) {
+		throw new CompileException(ctx, "cannot cast from float to int");
 	}
 
 	@Override
 	public void exitExpressionWithAssignment(ExpressionWithAssignmentContext ctx) {
-		VariableSymbol variable = getVariable(ctx.IDENTIFIER().getText());
+		VariableSymbol variable = getVariable(ctx, ctx.IDENTIFIER().getText());
 		if (variable == parallelIterator)
-			throw new RuntimeException(
-					"Parallel iterator modification is forbidden: "
-							+ parallelIterator.name);
+			throw new CompileException(ctx,
+					"parallel iterator modification is forbidden");
 		Type type = getCachedType(ctx.binaryExpression());
 		if (type == null)
-			throw new RuntimeException("Cannot assign void: " + ctx.getText());
+			throw new CompileException(ctx, "cannot assign void");
 		String castName = variable.type + "=" + type;
 		boolean array = ctx.getChild(1).getText().equals("[");
 		if (array)
 			castName = castName.replace("_ARRAY=", "=")
 					.replace("_POINTER", "=");
 		if (castName.contains("_ARRAY="))
-			throw new RuntimeException("Cannot assign to array variable: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "cannot assign to array variable");
 		log(ctx, ctx.getText() + " → " + castName);
 		switch (castName) {
 		case "INT=INT":
@@ -733,8 +782,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 			castFloatToInt(ctx);
 			break;
 		default:
-			throw new RuntimeException("Invalid cast " + castName + " in: "
-					+ ctx.getText());
+			throw new CompileException(ctx, "invalid cast to "
+					+ castName.replace('_', ' ').replace("=", " from "));
 		}
 		if (array) {
 			computeArrayIndexLocation(ctx, variable, 1);
@@ -762,8 +811,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 		emitBuffered(ctx.expression());
 		Type type = getCachedType(ctx.expression());
 		if (type == null)
-			throw new RuntimeException("Cannot branch on void expression: "
-					+ ctx.expression().getText());
+			throw new CompileException(ctx.expression(),
+					"cannot branch on void expression");
 		switch (type) {
 		case INT:
 		case INT_POINTER:
@@ -804,8 +853,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 		emitBuffered(ctx.condition);
 		Type type = getCachedType(ctx.condition);
 		if (type == null)
-			throw new RuntimeException("Cannot breanch on void expression: "
-					+ ctx.condition.getText());
+			throw new CompileException(ctx.condition,
+					"cannot branch on void expression");
 		switch (type) {
 		case INT:
 		case INT_POINTER:
@@ -833,18 +882,16 @@ public class ParaCCompiler extends ParaCBaseListener {
 	public void enterParallelIterationStatement(
 			ParallelIterationStatementContext ctx) {
 		if (parallelIterator != null)
-			throw new RuntimeException("Parallel loops cannot be nested");
+			throw new CompileException(ctx, "parallel loops cannot be nested");
 		buffersChildren.add(ctx);
 		String iterator = ctx.i1.getText();
 		if (!iterator.equals(ctx.i2.getText())
 				|| !ctx.i2.getText().equals(ctx.i3.getText()))
-			throw new RuntimeException(
-					"Only one identifier can be used as iterator: " + iterator
-							+ ", " + ctx.i2.getText() + ", " + ctx.i3.getText());
-		parallelIterator = getVariable(iterator);
+			throw new CompileException(ctx,
+					"only one identifier can be used as iterator");
+		parallelIterator = getVariable(ctx, iterator);
 		if (parallelIterator.type != Type.INT)
-			throw new RuntimeException("Parallel iterator must be an int: "
-					+ parallelIterator.name);
+			throw new CompileException(ctx, "parallel iterator must be an int");
 	}
 
 	@Override
@@ -917,8 +964,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 			break;
 		case INT_ARRAY:
 		case FLOAT_ARRAY:
-			throw new RuntimeException(
-					"Internal error, expression type should never be " + type);
+			// only happens with useless "a[i];" statements
+			break;
 		}
 	}
 
@@ -931,20 +978,21 @@ public class ParaCCompiler extends ParaCBaseListener {
 		symbolTable.pop();
 	}
 
-	private void addSymbol(Symbol symbol) {
+	private void addSymbol(ParserRuleContext ctx, Symbol symbol) {
 		Symbol old = symbolTable.element().put(symbol.name, symbol);
 		if (old != null && !old.equals(symbol))
-			throw new RuntimeException("Incompatible declarations of symbol: "
-					+ symbol.name);
+			throw new CompileException(ctx,
+					"incompatible declarations of symbol " + symbol.name);
 	}
 
 	private FunctionSymbol addFunctionSymbol(TypeNameContext returnType,
 			DeclaratorContext declarator) {
 		FunctionSymbol function = new FunctionSymbol();
-		if (declarator.declarator().getChildCount() != 1)
-			throw new RuntimeException("Invalid function name: "
-					+ declarator.declarator().getText());
-		function.name = declarator.declarator().getText();
+		DeclaratorContext nameDeclarator = declarator.declarator();
+		// FIXME throwing away pointer as a return type
+		if (nameDeclarator.getChildCount() != 1)
+			throw new CompileException(nameDeclarator, "invalid function declaration");
+		function.name = nameDeclarator.getText();
 		switch (returnType.getText()) {
 		case "void":
 			function.returnType = null;
@@ -962,15 +1010,14 @@ public class ParaCCompiler extends ParaCBaseListener {
 			function.returnType = Type.FLOAT_POINTER;
 			break;
 		default:
-			throw new RuntimeException("Invalid return type: "
-					+ returnType.getText() + " " + declarator.getText());
+			throw new CompileException(returnType, "invalid return type");
 		}
 		for (ParameterDeclarationContext parameter : declarator
 				.parameterDeclaration()) {
 			function.parameters.add(createVariable(parameter.typeName(),
 					parameter.declarator()));
 		}
-		addSymbol(function);
+		addSymbol(declarator, function);
 		return function;
 	}
 
@@ -983,12 +1030,12 @@ public class ParaCCompiler extends ParaCBaseListener {
 		return null;
 	}
 
-	private VariableSymbol getVariable(String name) {
+	private VariableSymbol getVariable(ParserRuleContext ctx, String name) {
 		Symbol symbol = findSymbol(name);
 		if (symbol == null)
-			throw new RuntimeException("No such variable: " + name);
+			throw new CompileException(ctx, "no such variable");
 		if (!(symbol instanceof VariableSymbol))
-			throw new RuntimeException("Symbol is not a variable: " + name);
+			throw new CompileException(ctx, "symbol is not a variable");
 		return (VariableSymbol) symbol;
 	}
 
@@ -1033,14 +1080,16 @@ public class ParaCCompiler extends ParaCBaseListener {
 				}
 			}
 		}
-		if (variable.name != null && variable.type != null)
-			return variable;
+		if (variable.name == null)
+			throw new CompileException(declarator,
+					"invalid declaration of variable");
+		else if (variable.type == null)
+			throw new CompileException(typeName, "invalid type for variable");
 		else
-			throw new RuntimeException("Invalid declaration of variable: "
-					+ declarator.getText());
+			return variable;
 	}
 
-	private void cacheType(RuleContext ctx, Type type) {
+	private void cacheType(ParserRuleContext ctx, Type type) {
 		Type oldType = typeCache.element().put(ctx.getSourceInterval(), type);
 		if (type != oldType && !Objects.equals(oldType, type))
 			log(ctx, ctx.getText() + " → "
@@ -1056,14 +1105,14 @@ public class ParaCCompiler extends ParaCBaseListener {
 		return "__" + branchCounter++ + "_";
 	}
 
-	private void emit(RuleContext ctx, String code) {
+	private void emit(ParserRuleContext ctx, String code) {
 		if (buffersChildren.isEmpty()) {
 			System.out.println(code);
 		} else {
-			RuleContext parentCtx = ctx.parent;
+			ParserRuleContext parentCtx = (ParserRuleContext) ctx.parent;
 			while (parentCtx != null && parentCtx != buffersChildren.peek()) {
 				ctx = parentCtx;
-				parentCtx = ctx.parent;
+				parentCtx = (ParserRuleContext) ctx.parent;
 			}
 			String existingCode = codeMap.get(ctx);
 			codeMap.put(ctx, existingCode != null ? existingCode + "\n" + code
@@ -1071,11 +1120,11 @@ public class ParaCCompiler extends ParaCBaseListener {
 		}
 	}
 
-	private void emit2(RuleContext ctx, String code) {
+	private void emit2(ParserRuleContext ctx, String code) {
 		emit(ctx, "\t" + code.replaceFirst(" ", "\t"));
 	}
 
-	private boolean emitBuffered(RuleContext ctx) {
+	private boolean emitBuffered(ParserRuleContext ctx) {
 		String code = codeMap.remove(ctx);
 		if (code == null)
 			return false;
@@ -1083,20 +1132,20 @@ public class ParaCCompiler extends ParaCBaseListener {
 		return true;
 	}
 
-	private void log(RuleContext ctx, String message) {
+	private void log(ParserRuleContext ctx, String message) {
 		emit(ctx, "# " + message);
 	}
 
 	public static void main(String[] args) throws Exception {
-		ANTLRFileStream input;
-		input = new ANTLRFileStream(args[0]);
-		ParaCLexer lexer = new ParaCLexer(input);
-		ParaCParser parser = new ParaCParser(new CommonTokenStream(lexer));
+		ParaCParser parser = new ParaCParser(new CommonTokenStream(
+				new ParaCLexer(new ANTLRFileStream(args[0]))));
 		parser.setErrorHandler(new BailErrorStrategy());
-		ParserRuleContext tree = parser.program();
-		ParseTreeWalker walker = new ParseTreeWalker();
-		ParaCCompiler assemblyGenerator = new ParaCCompiler();
-		walker.walk(assemblyGenerator, tree);
+		try {
+			new ParseTreeWalker().walk(new ParaCCompiler(), parser.program());
+		} catch (CompileException e) {
+			System.err.println(e.getMessage(parser));
+			System.exit(1);
+		}
 	}
 
 }
