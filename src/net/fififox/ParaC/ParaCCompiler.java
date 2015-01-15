@@ -861,6 +861,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 		emit2(ctx, "mov %esp, __parac_parallel_for_esp");
 
 		emitBuffered(ctx.to);
+		emit2(ctx, "mov (%esp), %eax");
+		emit2(ctx, "mov %eax, " + parallelIterator.address);
 		emitBuffered(ctx.from);
 		emit2(ctx, "call __parac_run_parallel_for");
 		emit2(ctx, "add $" + 2 * INT_SIZE + ", %esp");

@@ -16,6 +16,7 @@ void foo(float a) {
 #pragma omp parallel for
 	for (i = 0; i < 10; i++)
 		printint(i);
+	printfloat(i);
 	if (k[1] > 1000)
 		printfloat(a--);
 	printfloat(a);
