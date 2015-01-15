@@ -122,13 +122,11 @@ public class ParaCCompiler extends ParaCBaseListener {
 					.append(": error: ").append(super.getMessage())
 					.append('\n');
 			int position = 0;
-			System.err.println(sourceInterval);
 			for (String line : lines.split("\n")) {
 				message.append(line).append('\n');
 				byte[] chars = line.getBytes();
 				for (int i = 0; i < chars.length; ++i) {
 					int sourcePosition = lineInterval.a + position + i;
-					System.err.println(sourcePosition);
 					if (" \t\r\n".indexOf(chars[i]) == -1) {
 						if (sourcePosition >= sourceInterval.a
 								&& sourcePosition <= sourceInterval.b)
@@ -752,8 +750,8 @@ public class ParaCCompiler extends ParaCBaseListener {
 		String castName = variable.type + "=" + type;
 		boolean array = ctx.getChild(1).getText().equals("[");
 		if (array)
-			castName = castName.replace("_ARRAY=", "=")
-					.replace("_POINTER", "=");
+			castName = castName.replace("_ARRAY=", "=").replace("_POINTER=",
+					"=");
 		if (castName.contains("_ARRAY="))
 			throw new CompileException(ctx, "cannot assign to array variable");
 		log(ctx, ctx.getText() + " → " + castName);
